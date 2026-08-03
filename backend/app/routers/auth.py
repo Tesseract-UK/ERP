@@ -8,7 +8,7 @@ from ..models import User
 from ..schemas import ChangePasswordRequest, LoginRequest, SetPasswordRequest
 from ..security import create_access_token, hash_password, verify_password
 from ..serializers import user_full
-from ..utils import audit, check_email_domain
+from ..utils import audit, check_email_domain, notify
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -35,9 +35,32 @@ def me(user: User = Depends(get_current_user)):
     return user_full(user)
 
 
+@router.post("/password-change-request")
+def request_password_change(request: Request, user: User = Depends(get_current_user),
+                            db: Session = Depends(get_db)):
+    """Ask the admins for permission to change the password."""
+    if user.must_change_password:
+        raise HTTPException(status_code=400,
+                            detail="A password change is already approved — sign out and back in to set it")
+    admins = db.query(User).filter(User.role == "admin", User.is_active.is_(True)).all()
+    for a in admins:
+        notify(db, a.id, "Password change request",
+               f"{user.full_name} ({user.employee_code}) requests permission to "
+               f"change their password. Approve it from the Employees page.", "approval")
+    audit(db, user.id, "request_password_change", "auth", client=client_info(request))
+    db.commit()
+    return {"message": "Request sent to the administrators. You will be notified once approved."}
+
+
 @router.post("/change-password")
 def change_password(body: ChangePasswordRequest, request: Request,
                     user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    # Company policy: only admins may change their password directly; everyone
+    # else goes through request → admin approval → forced reset at next login.
+    if user.role != "admin":
+        raise HTTPException(status_code=403,
+                            detail="Password changes require admin approval. "
+                                   "Use 'Request password change' on your profile page.")
     if not verify_password(body.current_password, user.password_hash):
         raise HTTPException(status_code=400, detail="Current password is incorrect")
     user.password_hash = hash_password(body.new_password)

@@ -46,8 +46,9 @@ function PasswordStep({ onDone }) {
     <form onSubmit={submit}>
       <h3 style={{ marginBottom: 4 }}>Set your password</h3>
       <p className="help-text" style={{ marginBottom: 16 }}>
-        You signed in with a temporary password issued by HR. Choose your own
-        password to continue — only you will know it.
+        A new password is required to continue — either this is your first sign-in
+        with a password issued by HR, or an admin approved your change request.
+        Choose a password only you know.
       </p>
       <Field label="New password" required help="At least 8 characters">
         <input className="input" type="password" required minLength={8} autoFocus
@@ -158,13 +159,18 @@ export default function Onboarding() {
   const { user, setUser, logout } = useAuth()
   const needsPassword = user.must_change_password
   const [step, setStep] = useState(needsPassword ? 0 : 1)
-  const totalSteps = 2
+  // Existing users approved for a password change only see the password step.
+  const totalSteps = user.profile_completed ? 1 : 2
 
   return (
     <div className="login-wrap">
       <div className="login-card" style={{ maxWidth: 520 }}>
         <div className="logo">◈ Tesseract HRMS</div>
-        <div className="tag">Welcome, {user.full_name} — let's get you set up</div>
+        <div className="tag">
+          {user.profile_completed === false
+            ? <>Welcome, {user.full_name} — let's get you set up</>
+            : <>Hi {user.full_name.split(' ')[0]}, set your new password to continue</>}
+        </div>
         <StepDots step={step} total={totalSteps} />
         {step === 0 && <PasswordStep onDone={(u) => { setUser(u); setStep(1) }} />}
         {step === 1 && <DetailsStep onDone={setUser} />}

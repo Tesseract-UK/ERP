@@ -210,6 +210,7 @@ function ResetPasswordModal({ employee, onClose }) {
 
 export default function Employees() {
   const toast = useToast()
+  const { user } = useAuth()
   const [data, setData] = useState(null)
   const [orgData, setOrgData] = useState(null)
   const [search, setSearch] = useState('')
@@ -227,6 +228,19 @@ export default function Employees() {
     api.get(`/hr/employees?${params}`).then(setData).catch((e) => toast(e.message, 'error'))
   }, [page, search, includeInactive, toast])
   useEffect(load, [load])
+
+  const allowPasswordChange = async (emp) => {
+    setBusy(true)
+    try {
+      const res = await api.post(`/hr/employees/${emp.id}/allow-password-change`)
+      toast(res.message, 'success')
+      setModal(null)
+    } catch (err) {
+      toast(err.message, 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
 
   const toggleActive = async (emp) => {
     setBusy(true)
@@ -281,6 +295,8 @@ export default function Employees() {
                         <div className="toolbar" style={{ gap: 6 }}>
                           <button className="btn secondary sm" onClick={() => setModal({ type: 'edit', id: e.id })}>Edit</button>
                           <button className="btn ghost sm" onClick={() => setModal({ type: 'reset', emp: e })}>Reset PW</button>
+                          {user.role === 'admin' &&
+                            <button className="btn ghost sm" onClick={() => setModal({ type: 'allow-pw', emp: e })}>Allow PW Change</button>}
                           <button className={`btn ghost sm`} style={{ color: e.is_active ? 'var(--danger)' : 'var(--ok)' }}
                                   onClick={() => setModal({ type: 'toggle', emp: e })}>
                             {e.is_active ? 'Deactivate' : 'Activate'}
@@ -304,6 +320,12 @@ export default function Employees() {
                        onDone={() => { setModal(null); load() }} />}
       {modal?.type === 'reset' &&
         <ResetPasswordModal employee={modal.emp} onClose={() => setModal(null)} />}
+      {modal?.type === 'allow-pw' &&
+        <ConfirmDialog busy={busy}
+          title={`Allow password change — ${modal.emp.full_name}`}
+          message="The employee will be required to set a new password at their next sign-in. Their current password keeps working until then."
+          confirmLabel="Allow Change"
+          onConfirm={() => allowPasswordChange(modal.emp)} onClose={() => setModal(null)} />}
       {modal?.type === 'toggle' &&
         <ConfirmDialog danger={modal.emp.is_active} busy={busy}
           title={`${modal.emp.is_active ? 'Deactivate' : 'Reactivate'} ${modal.emp.full_name}`}

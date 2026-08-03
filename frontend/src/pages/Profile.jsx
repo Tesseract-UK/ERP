@@ -1,6 +1,7 @@
 // Self-service profile: editable contact fields, read-only sensitive data.
 import { useEffect, useState } from 'react'
 import { api } from '../api'
+import { useAuth } from '../AuthContext'
 import { Field, Spinner, fmtDate, titleCase, useToast } from '../components/ui'
 
 function ReadRow({ label, value }) {
@@ -14,6 +15,7 @@ function ReadRow({ label, value }) {
 
 export default function Profile() {
   const toast = useToast()
+  const { user } = useAuth()
   const [profile, setProfile] = useState(null)
   const [form, setForm] = useState({})
   const [pw, setPw] = useState({ current_password: '', new_password: '' })
@@ -51,6 +53,18 @@ export default function Profile() {
       await api.post('/auth/change-password', pw)
       setPw({ current_password: '', new_password: '' })
       toast('Password changed successfully', 'success')
+    } catch (err) {
+      toast(err.message, 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const requestPasswordChange = async () => {
+    setBusy(true)
+    try {
+      const res = await api.post('/auth/password-change-request')
+      toast(res.message, 'success')
     } catch (err) {
       toast(err.message, 'error')
     } finally {
@@ -116,20 +130,33 @@ export default function Profile() {
           </form>
         </div>
         <div className="card">
-          <div className="card-head"><h3>Change Password</h3></div>
-          <form className="card-body" onSubmit={changePassword}>
-            <Field label="Current password" required>
-              <input className="input" type="password" required autoComplete="current-password"
-                     value={pw.current_password}
-                     onChange={(e) => setPw({ ...pw, current_password: e.target.value })} />
-            </Field>
-            <Field label="New password" required help="At least 8 characters">
-              <input className="input" type="password" required minLength={8} autoComplete="new-password"
-                     value={pw.new_password}
-                     onChange={(e) => setPw({ ...pw, new_password: e.target.value })} />
-            </Field>
-            <button className="btn" disabled={busy}>Update Password</button>
-          </form>
+          <div className="card-head"><h3>Password</h3></div>
+          {user.role === 'admin' ? (
+            <form className="card-body" onSubmit={changePassword}>
+              <Field label="Current password" required>
+                <input className="input" type="password" required autoComplete="current-password"
+                       value={pw.current_password}
+                       onChange={(e) => setPw({ ...pw, current_password: e.target.value })} />
+              </Field>
+              <Field label="New password" required help="At least 8 characters">
+                <input className="input" type="password" required minLength={8} autoComplete="new-password"
+                       value={pw.new_password}
+                       onChange={(e) => setPw({ ...pw, new_password: e.target.value })} />
+              </Field>
+              <button className="btn" disabled={busy}>Update Password</button>
+            </form>
+          ) : (
+            <div className="card-body">
+              <p style={{ color: 'var(--ink-2)', marginBottom: 12 }}>
+                Company policy: password changes need administrator approval.
+                Send a request, and once an admin approves it you will be asked to
+                set a new password at your next sign-in.
+              </p>
+              <button className="btn secondary" disabled={busy} onClick={requestPasswordChange}>
+                {busy ? 'Sending…' : 'Request Password Change'}
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -9,7 +9,7 @@ from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..deps import client_info, require_hr
+from ..deps import client_info, require_admin, require_hr
 from ..models import (
     Attendance, EmployeeDocument, Holiday, LeavePolicy, LeaveRequest, User,
 )
@@ -154,6 +154,23 @@ def activate(employee_id: int, request: Request,
           client_info(request))
     db.commit()
     return {"message": f"{emp.full_name} has been reactivated"}
+
+
+@router.post("/employees/{employee_id}/allow-password-change")
+def allow_password_change(employee_id: int, request: Request,
+                          user: User = Depends(require_admin),
+                          db: Session = Depends(get_db)):
+    """Admin grants a user permission to set a new password at next sign-in."""
+    emp = db.get(User, employee_id)
+    if emp is None:
+        raise HTTPException(status_code=404, detail="Employee not found")
+    emp.must_change_password = True
+    notify(db, emp.id, "Password change approved",
+           "Sign out and sign back in to set your new password.", "approved")
+    audit(db, user.id, "allow_password_change", "hr",
+          f"For {emp.full_name} (#{emp.id})", client_info(request))
+    db.commit()
+    return {"message": f"{emp.full_name} can set a new password at their next sign-in"}
 
 
 @router.post("/employees/{employee_id}/reset-password")
