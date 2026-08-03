@@ -30,6 +30,8 @@ def user_full(u: User, include_sensitive: bool = False) -> dict:
         "emergency_contact_phone": u.emergency_contact_phone,
         "address": u.address,
         "is_active": u.is_active,
+        "must_change_password": u.must_change_password,
+        "profile_completed": u.profile_completed,
     }
     if include_sensitive:
         data.update(pan_number=u.pan_number, aadhaar_number=u.aadhaar_number,

@@ -9,9 +9,9 @@ from ..config import UPLOAD_DIR
 from ..database import get_db
 from ..deps import client_info, get_current_user
 from ..models import EmployeeDocument, User
-from ..schemas import ProfileUpdateRequest
+from ..schemas import OnboardingRequest, ProfileUpdateRequest
 from ..serializers import user_full
-from ..utils import audit
+from ..utils import audit, notify
 
 router = APIRouter(tags=["profile"])
 
@@ -34,6 +34,31 @@ def update_profile(body: ProfileUpdateRequest, request: Request,
         audit(db, user.id, "update_profile", "profile", ", ".join(changed),
               client_info(request))
         db.commit()
+    return user_full(user)
+
+
+@router.post("/profile/onboarding")
+def complete_onboarding(body: OnboardingRequest, request: Request,
+                        user: User = Depends(get_current_user),
+                        db: Session = Depends(get_db)):
+    """One-time self-submission of personal details by a new employee.
+    Sensitive fields become HR-managed (read-only for the employee) afterwards."""
+    if user.profile_completed:
+        raise HTTPException(status_code=400,
+                            detail="Your profile is already complete. Contact HR for corrections.")
+    for field in ("phone", "address", "emergency_contact_name", "emergency_contact_phone",
+                  "date_of_birth", "pan_number", "aadhaar_number", "passport_number",
+                  "bank_account", "ifsc_code"):
+        value = getattr(body, field)
+        if value is not None:
+            setattr(user, field, value)
+    user.profile_completed = True
+    if user.manager_id:
+        notify(db, user.manager_id, "New team member onboarded",
+               f"{user.full_name} has completed their profile.", "info")
+    audit(db, user.id, "complete_onboarding", "profile",
+          "First-login personal details submitted", client_info(request))
+    db.commit()
     return user_full(user)
 
 

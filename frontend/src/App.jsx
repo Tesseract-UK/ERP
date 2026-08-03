@@ -3,6 +3,7 @@ import { useAuth } from './AuthContext'
 import Layout from './components/Layout'
 import { Spinner } from './components/ui'
 import Login from './pages/Login'
+import Onboarding from './pages/Onboarding'
 import Dashboard from './pages/Dashboard'
 import Attendance from './pages/Attendance'
 import Leaves from './pages/Leaves'
@@ -30,6 +31,12 @@ function Guard({ roles, children }) {
 export default function App() {
   const { user, loading } = useAuth()
   if (loading) return <Spinner />
+
+  // New joiners must set a password and complete their profile before
+  // anything else unlocks.
+  if (user && (user.must_change_password || user.profile_completed === false)) {
+    return <Onboarding />
+  }
 
   return (
     <Routes>

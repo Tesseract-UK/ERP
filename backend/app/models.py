@@ -80,6 +80,10 @@ class User(Base):
     emergency_contact_phone: Mapped[str | None] = mapped_column(String(20))
     address: Mapped[str | None] = mapped_column(Text)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # First-login onboarding: force a password change, then a one-time
+    # personal-details submission before the app unlocks.
+    must_change_password: Mapped[bool] = mapped_column(Boolean, default=False)
+    profile_completed: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     department = relationship("Department", lazy="joined")

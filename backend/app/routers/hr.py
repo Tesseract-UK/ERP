@@ -75,7 +75,10 @@ def create_employee(body: EmployeeUpsertRequest, request: Request,
 
     emp = User(email=body.email.lower(), full_name=body.full_name,
                employee_code=body.employee_code or _next_employee_code(db),
-               password_hash=hash_password(body.password))
+               password_hash=hash_password(body.password),
+               # New joiners must change the temp password and complete
+               # the onboarding form on first login.
+               must_change_password=True, profile_completed=False)
     _apply_employee_fields(emp, body)
     db.add(emp)
     audit(db, user.id, "create_employee", "hr",
@@ -160,6 +163,7 @@ def reset_password(employee_id: int, body: ResetPasswordRequest, request: Reques
     if emp.role == "admin" and user.role != "admin":
         raise HTTPException(status_code=403, detail="Only an admin can reset an admin password")
     emp.password_hash = hash_password(body.new_password)
+    emp.must_change_password = True  # force a fresh password on next login
     notify(db, emp.id, "Password reset", "Your password was reset by HR.", "info")
     audit(db, user.id, "reset_password", "hr", f"For {emp.full_name} (#{emp.id})",
           client_info(request))

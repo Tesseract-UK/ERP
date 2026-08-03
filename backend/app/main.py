@@ -24,6 +24,25 @@ app.add_middleware(
 # migrations when the schema starts evolving in production.
 Base.metadata.create_all(bind=engine)
 
+
+def _ensure_new_columns():
+    """Additive mini-migration for databases created before newer columns."""
+    from sqlalchemy import inspect, text
+    existing = {c["name"] for c in inspect(engine).get_columns("users")}
+    with engine.begin() as conn:
+        if "must_change_password" not in existing:
+            conn.execute(text(
+                "ALTER TABLE users ADD COLUMN must_change_password BOOLEAN DEFAULT FALSE"))
+            conn.execute(text("UPDATE users SET must_change_password = FALSE"))
+        if "profile_completed" not in existing:
+            # Accounts predating the onboarding feature are treated as complete.
+            conn.execute(text(
+                "ALTER TABLE users ADD COLUMN profile_completed BOOLEAN DEFAULT TRUE"))
+            conn.execute(text("UPDATE users SET profile_completed = TRUE"))
+
+
+_ensure_new_columns()
+
 for router in (auth.router, dashboard.router, attendance.router, leaves.router,
                wfh.router, regularization.router, approvals.router, team.router,
                hr.router, admin.router, notifications.router, profile.router):

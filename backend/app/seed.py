@@ -62,7 +62,8 @@ def seed() -> None:
                      department_id=dept.id, designation_id=des.id,
                      location_id=hq.id, shift_id=general.id,
                      manager_id=manager.id if manager else None,
-                     joining_date=date(2025, 1, 15), date_of_birth=dob)
+                     joining_date=date(2025, 1, 15), date_of_birth=dob,
+                     profile_completed=True)
             db.add(u)
             db.flush()
             return u

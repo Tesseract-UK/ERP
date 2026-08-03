@@ -16,6 +16,25 @@ class ChangePasswordRequest(BaseModel):
     new_password: str = Field(min_length=8, max_length=128)
 
 
+class SetPasswordRequest(BaseModel):
+    """Forced first-login password change (no current password needed)."""
+    new_password: str = Field(min_length=8, max_length=128)
+
+
+class OnboardingRequest(BaseModel):
+    """One-time personal-details submission by a new employee."""
+    phone: str = Field(min_length=7, max_length=20)
+    address: str = Field(min_length=5, max_length=1000)
+    emergency_contact_name: str = Field(min_length=2, max_length=150)
+    emergency_contact_phone: str = Field(min_length=7, max_length=20)
+    date_of_birth: date | None = None
+    pan_number: str | None = Field(default=None, max_length=20)
+    aadhaar_number: str | None = Field(default=None, max_length=20)
+    passport_number: str | None = Field(default=None, max_length=30)
+    bank_account: str | None = Field(default=None, max_length=30)
+    ifsc_code: str | None = Field(default=None, max_length=15)
+
+
 class CheckInRequest(BaseModel):
     local_time: str  # ISO datetime from the client's clock
     latitude: float | None = None
