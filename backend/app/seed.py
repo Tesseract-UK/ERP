@@ -68,21 +68,21 @@ def seed() -> None:
             db.flush()
             return u
 
-        admin = make_user("EMP0001", "admin@tesseract.com", "Aarav Sharma", "admin",
+        admin = make_user("EMP0001", "admin@tesseractuk.in", "Aarav Sharma", "admin",
                           ops, des_admin, dob=date(1988, 5, 12))
-        hr_user = make_user("EMP0002", "hr@tesseract.com", "Priya Nair", "hr",
+        hr_user = make_user("EMP0002", "hr@tesseractuk.in", "Priya Nair", "hr",
                             hr_dept, des_hr, manager=admin, dob=date(1992, 8, 21))
-        manager = make_user("EMP0003", "manager@tesseract.com", "Rahul Verma", "manager",
+        manager = make_user("EMP0003", "manager@tesseractuk.in", "Rahul Verma", "manager",
                             engineering, des_lead, manager=admin, dob=date(1990, 8, 10))
-        make_user("EMP0004", "employee@tesseract.com", "Sneha Iyer", "employee",
+        make_user("EMP0004", "employee@tesseractuk.in", "Sneha Iyer", "employee",
                   engineering, des_eng, manager=manager, dob=date(1996, 8, 5))
-        make_user("EMP0005", "dev2@tesseract.com", "Karan Patel", "employee",
+        make_user("EMP0005", "dev2@tesseractuk.in", "Karan Patel", "employee",
                   engineering, des_eng, manager=manager, dob=date(1995, 2, 18))
 
         db.commit()
         print("Seeded demo data. All demo accounts use password: Password@123")
-        print("  admin@tesseract.com / hr@tesseract.com / manager@tesseract.com / "
-              "employee@tesseract.com / dev2@tesseract.com")
+        print("  admin@tesseractuk.in / hr@tesseractuk.in / manager@tesseractuk.in / "
+              "employee@tesseractuk.in / dev2@tesseractuk.in")
     finally:
         db.close()
 

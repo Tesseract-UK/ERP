@@ -16,6 +16,18 @@ from .models import Attendance, AuditLog, Holiday, Notification
 ALLOWED_UPLOAD_EXTENSIONS = {".pdf", ".png", ".jpg", ".jpeg", ".doc", ".docx"}
 
 
+def check_email_domain(email: str) -> None:
+    """Reject emails outside the company's allowed domains."""
+    from .config import ALLOWED_EMAIL_DOMAINS
+    if "*" in ALLOWED_EMAIL_DOMAINS:
+        return
+    domain = email.rsplit("@", 1)[-1].lower()
+    if domain not in ALLOWED_EMAIL_DOMAINS:
+        allowed = ", ".join(f"@{d}" for d in ALLOWED_EMAIL_DOMAINS)
+        raise HTTPException(status_code=403,
+                            detail=f"Only {allowed} accounts can be used")
+
+
 def audit(db: Session, user_id: int | None, action: str, module: str,
           details: str = "", client: dict | None = None) -> None:
     db.add(AuditLog(

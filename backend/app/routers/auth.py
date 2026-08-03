@@ -8,13 +8,14 @@ from ..models import User
 from ..schemas import ChangePasswordRequest, LoginRequest, SetPasswordRequest
 from ..security import create_access_token, hash_password, verify_password
 from ..serializers import user_full
-from ..utils import audit
+from ..utils import audit, check_email_domain
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 @router.post("/login")
 def login(body: LoginRequest, request: Request, db: Session = Depends(get_db)):
+    check_email_domain(body.email)
     user = db.query(User).filter(User.email == body.email.lower()).first()
     if user is None or not verify_password(body.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid email or password")

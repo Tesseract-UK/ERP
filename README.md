@@ -41,7 +41,7 @@ npm run dev                 # http://localhost:5173
 ```
 
 Demo accounts (password `Password@123`):
-`admin@tesseract.com` · `hr@tesseract.com` · `manager@tesseract.com` · `employee@tesseract.com`
+`admin@tesseractuk.in` · `hr@tesseractuk.in` · `manager@tesseractuk.in` · `employee@tesseractuk.in`
 
 API docs: http://localhost:8000/docs
 

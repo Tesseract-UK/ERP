@@ -18,7 +18,7 @@ from ..schemas import (
 )
 from ..security import hash_password
 from ..serializers import holiday_out, user_brief, user_full
-from ..utils import audit, notify, save_upload
+from ..utils import audit, check_email_domain, notify, save_upload
 
 router = APIRouter(prefix="/hr", tags=["hr"])
 
@@ -68,6 +68,7 @@ def create_employee(body: EmployeeUpsertRequest, request: Request,
                     user: User = Depends(require_hr), db: Session = Depends(get_db)):
     if body.role == "admin" and user.role != "admin":
         raise HTTPException(status_code=403, detail="Only an admin can create admin users")
+    check_email_domain(body.email)
     if db.query(User).filter(User.email == body.email.lower()).first():
         raise HTTPException(status_code=400, detail="An account with this email already exists")
     if not body.password:
@@ -107,6 +108,7 @@ def update_employee(employee_id: int, body: EmployeeUpsertRequest, request: Requ
         raise HTTPException(status_code=403, detail="Only an admin can modify admin users")
     if body.manager_id == emp.id:
         raise HTTPException(status_code=400, detail="An employee cannot be their own manager")
+    check_email_domain(body.email)
     clash = db.query(User).filter(User.email == body.email.lower(),
                                   User.id != emp.id).first()
     if clash:

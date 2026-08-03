@@ -17,6 +17,11 @@ ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "480"
 # Comma-separated list of allowed frontend origins (Vercel URL in production).
 CORS_ORIGINS = [o.strip() for o in os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",") if o.strip()]
 
+# Only accounts on these email domains may sign in or be created.
+# Comma-separated; set to "*" to allow any domain.
+ALLOWED_EMAIL_DOMAINS = [d.strip().lower().lstrip("@") for d in
+                         os.getenv("ALLOWED_EMAIL_DOMAINS", "tesseractuk.in").split(",") if d.strip()]
+
 UPLOAD_DIR = os.getenv("UPLOAD_DIR", os.path.join(os.path.dirname(os.path.dirname(__file__)), "uploads"))
 MAX_UPLOAD_SIZE = 5 * 1024 * 1024  # 5 MB
 

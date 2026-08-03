@@ -30,7 +30,7 @@ export default function Login() {
         <Field label="Email address" required>
           <input className="input" type="email" value={email} required autoFocus
                  autoComplete="username"
-                 onChange={(e) => setEmail(e.target.value)} placeholder="you@company.com" />
+                 onChange={(e) => setEmail(e.target.value)} placeholder="you@tesseractuk.in" />
         </Field>
         <Field label="Password" required error={error}>
           <input className="input" type="password" value={password} required
