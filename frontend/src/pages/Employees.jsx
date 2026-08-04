@@ -2,9 +2,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '../api'
 import {
-  ConfirmDialog, EmptyState, Field, Modal, Pagination, Spinner, titleCase, useToast,
+  ConfirmDialog, EmptyState, Field, Modal, Pagination, PasswordInput, Spinner, titleCase, useToast,
 } from '../components/ui'
 import { useAuth } from '../AuthContext'
+import { IdCard } from '../components/icons'
 
 const EMPTY_FORM = {
   email: '', full_name: '', employee_code: '', password: '', role: 'employee',
@@ -80,7 +81,7 @@ function EmployeeModal({ employeeId, orgData, onClose, onDone }) {
             <input className="input" value={form.employee_code} onChange={(e) => set('employee_code', e.target.value)} />
           </Field>
           <Field label={employeeId ? 'New password (leave blank to keep)' : 'Initial password'} required={!employeeId}>
-            <input className="input" type="password" minLength={8} required={!employeeId}
+            <PasswordInput minLength={8} required={!employeeId}
                    autoComplete="new-password" value={form.password} onChange={(e) => set('password', e.target.value)} />
           </Field>
         </div>
@@ -200,7 +201,7 @@ function ResetPasswordModal({ employee, onClose }) {
     }>
       <form id="pw-form" onSubmit={submit}>
         <Field label="New password" required help="At least 8 characters. Share it with the employee securely.">
-          <input className="input" type="password" required minLength={8} value={pw}
+          <PasswordInput required minLength={8} value={pw}
                  autoComplete="new-password" onChange={(e) => setPw(e.target.value)} />
         </Field>
       </form>
@@ -275,7 +276,7 @@ export default function Employees() {
 
       <div className="card">
         {data === null ? <Spinner /> : data.items.length === 0
-          ? <EmptyState icon="🗂" title="No employees found" hint="Try a different search." />
+          ? <EmptyState icon={IdCard} title="No employees found" hint="Try a different search." />
           : (
             <>
               <div className="table-wrap"><table className="table">

@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api'
 import { EmptyState, Pagination, Spinner, fmtDateTime, useToast } from '../components/ui'
+import { ShieldCheck } from '../components/icons'
 
 const MODULES = ['auth', 'attendance', 'leaves', 'wfh', 'regularization',
                  'approvals', 'profile', 'hr', 'admin']
@@ -30,7 +31,7 @@ export default function AuditLogs() {
       </div>
       <div className="card">
         {data === null ? <Spinner /> : data.items.length === 0
-          ? <EmptyState icon="🛡" title="No audit entries" />
+          ? <EmptyState icon={ShieldCheck} title="No audit entries" />
           : (
             <>
               <div className="table-wrap"><table className="table">

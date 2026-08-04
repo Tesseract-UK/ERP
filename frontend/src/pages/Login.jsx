@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useAuth } from '../AuthContext'
-import { Field } from '../components/ui'
+import { Field, PasswordInput } from '../components/ui'
+import { Logo } from '../components/icons'
 
 export default function Login() {
   const { login } = useAuth()
@@ -25,7 +26,7 @@ export default function Login() {
   return (
     <div className="login-wrap">
       <form className="login-card" onSubmit={submit}>
-        <div className="logo">◈ Tesseract HRMS</div>
+        <div className="logo"><Logo size={19} /> Tesseract HRMS</div>
         <div className="tag">Sign in to your workspace</div>
         <Field label="Email address" required>
           <input className="input" type="email" value={email} required autoFocus
@@ -33,7 +34,7 @@ export default function Login() {
                  onChange={(e) => setEmail(e.target.value)} placeholder="you@tesseractuk.in" />
         </Field>
         <Field label="Password" required error={error}>
-          <input className="input" type="password" value={password} required
+          <PasswordInput value={password} required
                  autoComplete="current-password"
                  onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" />
         </Field>

@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import { api, downloadCsv } from '../api'
 import { EmptyState, Spinner, fmtDate, useToast } from '../components/ui'
+import { BarChart3, Download } from '../components/icons'
 
 const now = new Date()
 const REPORTS = [
@@ -73,12 +74,13 @@ export default function Reports() {
           </select>
         )}
         <div style={{ flex: 1 }} />
-        <button className="btn secondary" onClick={exportCsv} disabled={!rows?.length}>⬇ Export CSV</button>
+        <button className="btn secondary" onClick={exportCsv} disabled={!rows?.length}>
+          <Download size={14} /> Export CSV</button>
       </div>
 
       <div className="card">
         {rows === null ? <Spinner /> : rows.length === 0
-          ? <EmptyState icon="📊" title="No data for this period" hint="Try another month or report." />
+          ? <EmptyState icon={BarChart3} title="No data for this period" hint="Try another month or report." />
           : (
             <div className="table-wrap"><table className="table">
               <thead><tr>{headers.map((h) => (

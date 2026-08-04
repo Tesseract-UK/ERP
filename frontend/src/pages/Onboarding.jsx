@@ -3,7 +3,8 @@
 import { useState } from 'react'
 import { api } from '../api'
 import { useAuth } from '../AuthContext'
-import { Field, useToast } from '../components/ui'
+import { Field, PasswordInput, useToast } from '../components/ui'
+import { ArrowRight, CheckCircle2, Logo } from '../components/icons'
 
 function StepDots({ step, total }) {
   return (
@@ -51,16 +52,16 @@ function PasswordStep({ onDone }) {
         Choose a password only you know.
       </p>
       <Field label="New password" required help="At least 8 characters">
-        <input className="input" type="password" required minLength={8} autoFocus
+        <PasswordInput required minLength={8} autoFocus
                autoComplete="new-password" value={pw} onChange={(e) => setPw(e.target.value)} />
       </Field>
       <Field label="Confirm new password" required
              error={confirm && pw !== confirm ? 'Passwords do not match' : ''}>
-        <input className="input" type="password" required minLength={8}
+        <PasswordInput required minLength={8}
                autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
       </Field>
       <button className="btn" style={{ width: '100%' }} disabled={busy}>
-        {busy ? 'Saving…' : 'Continue →'}
+        {busy ? 'Saving…' : <>Continue <ArrowRight size={15} /></>}
       </button>
     </form>
   )
@@ -83,7 +84,7 @@ function DetailsStep({ onDone }) {
       const payload = { ...form }
       for (const k of Object.keys(payload)) if (payload[k] === '') payload[k] = null
       const user = await api.post('/profile/onboarding', payload)
-      toast('Profile completed. Welcome to the team! 🎉', 'success')
+      toast('Profile completed. Welcome to the team!', 'success')
       onDone(user)
     } catch (err) {
       toast(err.message, 'error')
@@ -149,7 +150,7 @@ function DetailsStep({ onDone }) {
                onChange={(e) => set('passport_number', e.target.value)} />
       </Field>
       <button className="btn" style={{ width: '100%' }} disabled={busy}>
-        {busy ? 'Submitting…' : 'Complete Onboarding ✓'}
+        {busy ? 'Submitting…' : <>Complete Onboarding <CheckCircle2 size={15} /></>}
       </button>
     </form>
   )
@@ -165,7 +166,7 @@ export default function Onboarding() {
   return (
     <div className="login-wrap">
       <div className="login-card" style={{ maxWidth: 520 }}>
-        <div className="logo">◈ Tesseract HRMS</div>
+        <div className="logo"><Logo size={19} /> Tesseract HRMS</div>
         <div className="tag">
           {user.profile_completed === false
             ? <>Welcome, {user.full_name} — let's get you set up</>

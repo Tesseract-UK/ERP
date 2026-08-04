@@ -1,9 +1,13 @@
 // Color-coded month calendar with day-detail modal. Used for both the
-// employee's own attendance and manager team views.
+// employee's own attendance and manager team views. When `selfService` is
+// set (Attendance page only), clicking a date also offers quick Leave/WFH
+// application for that date, and shows any existing request for it.
 import { useState } from 'react'
 import {
   Modal, StatusBadge, fmtHours, fmtTime, titleCase,
 } from './ui'
+import { ChevronLeft, ChevronRight } from './icons'
+import { LeaveApplyForm, WfhApplyForm } from './RequestForms'
 
 const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const LEGEND = [
@@ -18,21 +22,49 @@ export function MonthNav({ year, month, onChange }) {
   }
   return (
     <div className="toolbar">
-      <button className="btn secondary sm" onClick={() => shift(-1)}>←</button>
+      <button className="btn secondary sm" onClick={() => shift(-1)} aria-label="Previous month"><ChevronLeft size={15} /></button>
       <strong style={{ minWidth: 130, textAlign: 'center' }}>
         {new Date(year, month - 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
       </strong>
-      <button className="btn secondary sm" onClick={() => shift(1)}>→</button>
+      <button className="btn secondary sm" onClick={() => shift(1)} aria-label="Next month"><ChevronRight size={15} /></button>
     </div>
   )
 }
 
-function DayDetail({ cell, onClose }) {
+function DayDetail({ cell, selfService, requests, onChanged, onClose }) {
+  const [mode, setMode] = useState('view') // 'view' | 'leave' | 'wfh'
   const d = cell.detail
   const isAttendance = d && d.check_in !== undefined
+  const title = new Date(cell.date + 'T00:00')
+    .toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+
+  if (mode === 'leave') {
+    return (
+      <Modal title="Apply for Leave" onClose={onClose}>
+        <LeaveApplyForm initialStart={cell.date} initialEnd={cell.date}
+                        onCancel={() => setMode('view')}
+                        onDone={() => { onChanged?.(); onClose() }} />
+      </Modal>
+    )
+  }
+  if (mode === 'wfh') {
+    return (
+      <Modal title="Request Work From Home" onClose={onClose}>
+        <WfhApplyForm initialStart={cell.date} initialEnd={cell.date}
+                      onCancel={() => setMode('view')}
+                      onDone={() => { onChanged?.(); onClose() }} />
+      </Modal>
+    )
+  }
+
+  const dayRequests = selfService
+    ? (requests || []).filter((r) => ['pending', 'approved'].includes(r.status)
+        && cell.date >= r.start_date && cell.date <= r.end_date)
+    : []
+  const canApply = selfService && cell.status !== 'holiday' && cell.status !== 'weekend'
+
   return (
-    <Modal title={new Date(cell.date + 'T00:00').toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
-           onClose={onClose}>
+    <Modal title={title} onClose={onClose}>
       <div style={{ marginBottom: 12 }}><StatusBadge status={cell.status || 'absent'} /></div>
       {isAttendance ? (
         <table className="table"><tbody>
@@ -53,11 +85,36 @@ function DayDetail({ cell, onClose }) {
             : 'No attendance record for this day.'}
         </p>
       )}
+
+      {canApply && (
+        <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
+          {dayRequests.length > 0 ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {dayRequests.map((r) => (
+                <div key={`${r.kind}-${r.id}`}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <strong>{r.kind === 'leave' ? `${titleCase(r.leave_type)} Leave` : 'Work From Home'}</strong>
+                    <StatusBadge status={r.status} />
+                  </div>
+                  {r.reason && <div className="help-text">“{r.reason}”</div>}
+                  {r.approver_name && r.status !== 'pending' &&
+                    <div className="help-text">Reviewed by {r.approver_name}</div>}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="toolbar">
+              <button type="button" className="btn secondary sm" onClick={() => setMode('leave')}>Apply for Leave</button>
+              <button type="button" className="btn secondary sm" onClick={() => setMode('wfh')}>Request WFH</button>
+            </div>
+          )}
+        </div>
+      )}
     </Modal>
   )
 }
 
-export default function MonthCalendar({ data }) {
+export default function MonthCalendar({ data, selfService, requests, onChanged }) {
   const [selected, setSelected] = useState(null)
   if (!data) return null
   const firstDow = new Date(data.year, data.month - 1, 1).getDay()
@@ -86,7 +143,8 @@ export default function MonthCalendar({ data }) {
           <span key={cls}><span className={`chip cal-cell ${cls}`} style={{ minHeight: 0, padding: 0 }} />{label}</span>
         ))}
       </div>
-      {selected && <DayDetail cell={selected} onClose={() => setSelected(null)} />}
+      {selected && <DayDetail cell={selected} selfService={selfService} requests={requests}
+                              onChanged={onChanged} onClose={() => setSelected(null)} />}
     </>
   )
 }

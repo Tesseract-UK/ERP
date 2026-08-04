@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api'
 import { useAuth } from '../AuthContext'
-import { Field, Spinner, fmtDate, titleCase, useToast } from '../components/ui'
+import { Field, PasswordInput, Spinner, fmtDate, titleCase, useToast } from '../components/ui'
 
 function ReadRow({ label, value }) {
   return (
@@ -134,12 +134,12 @@ export default function Profile() {
           {user.role === 'admin' ? (
             <form className="card-body" onSubmit={changePassword}>
               <Field label="Current password" required>
-                <input className="input" type="password" required autoComplete="current-password"
+                <PasswordInput required autoComplete="current-password"
                        value={pw.current_password}
                        onChange={(e) => setPw({ ...pw, current_password: e.target.value })} />
               </Field>
               <Field label="New password" required help="At least 8 characters">
-                <input className="input" type="password" required minLength={8} autoComplete="new-password"
+                <PasswordInput required minLength={8} autoComplete="new-password"
                        value={pw.new_password}
                        onChange={(e) => setPw({ ...pw, new_password: e.target.value })} />
               </Field>

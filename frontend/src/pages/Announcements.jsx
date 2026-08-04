@@ -4,6 +4,7 @@ import { api } from '../api'
 import {
   ConfirmDialog, EmptyState, Field, Spinner, fmtDateTime, useToast,
 } from '../components/ui'
+import { Megaphone } from '../components/icons'
 
 export default function Announcements() {
   const toast = useToast()
@@ -66,7 +67,7 @@ export default function Announcements() {
       <div className="card">
         <div className="card-head"><h3>Published</h3></div>
         {rows === null ? <Spinner /> : rows.length === 0
-          ? <EmptyState icon="📢" title="No announcements yet" />
+          ? <EmptyState icon={Megaphone} title="No announcements yet" />
           : (
             <div className="card-body">
               {rows.map((a) => (

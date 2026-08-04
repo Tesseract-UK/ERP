@@ -4,6 +4,7 @@ import { api } from '../api'
 import {
   EmptyState, Pagination, Spinner, StatusBadge, fmtDate, fmtHours, fmtTime, useToast,
 } from '../components/ui'
+import { Users } from '../components/icons'
 
 export default function Team() {
   const toast = useToast()
@@ -54,7 +55,7 @@ export default function Team() {
 
       <div className="card">
         {data === null ? <Spinner /> : data.items.length === 0
-          ? <EmptyState icon="👥" title="No attendance records match"
+          ? <EmptyState icon={Users} title="No attendance records match"
                         hint="Try adjusting the filters above." />
           : (
             <>

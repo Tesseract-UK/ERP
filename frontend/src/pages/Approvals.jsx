@@ -4,6 +4,7 @@ import { api } from '../api'
 import {
   EmptyState, Field, Modal, Spinner, fmtDate, fmtDateTime, fmtTime, titleCase, useToast,
 } from '../components/ui'
+import { CheckCircle2 } from '../components/icons'
 
 const KIND_LABEL = { leave: 'Leave', wfh: 'Work From Home', regularization: 'Regularization' }
 const KIND_TONE = { leave: 'warn', wfh: 'info', regularization: 'neutral' }
@@ -83,7 +84,7 @@ export default function Approvals() {
       </div>
 
       {visible.length === 0
-        ? <div className="card"><EmptyState icon="✅" title="All caught up!"
+        ? <div className="card"><EmptyState icon={CheckCircle2} title="All caught up!"
             hint="There are no pending requests to review." /></div>
         : visible.map((item) => (
           <div className="card pad" key={`${item.kind}-${item.id}`}

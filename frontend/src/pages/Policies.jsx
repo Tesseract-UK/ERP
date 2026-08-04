@@ -4,6 +4,7 @@ import { api } from '../api'
 import {
   ConfirmDialog, EmptyState, Field, Modal, Spinner, fmtDate, titleCase, useToast,
 } from '../components/ui'
+import { CalendarDays } from '../components/icons'
 
 const POLICY_KEYS = ['casual', 'sick', 'earned', 'maternity', 'paternity', 'optional_holiday', 'wfh']
 
@@ -127,7 +128,7 @@ export default function Policies() {
           </div>
         </div>
         {holidays === null ? <Spinner /> : holidays.length === 0
-          ? <EmptyState icon="🗓" title={`No holidays configured for ${year}`} />
+          ? <EmptyState icon={CalendarDays} title={`No holidays configured for ${year}`} />
           : (
             <div className="table-wrap"><table className="table">
               <thead><tr><th>Date</th><th>Holiday</th><th>Type</th><th></th></tr></thead>

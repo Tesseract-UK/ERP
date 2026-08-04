@@ -4,6 +4,7 @@ import { api } from '../api'
 import {
   EmptyState, Field, Modal, Spinner, StatusBadge, fmtDate, fmtTime, useToast,
 } from '../components/ui'
+import { PenLine } from '../components/icons'
 
 function ApplyModal({ onClose, onDone }) {
   const toast = useToast()
@@ -87,7 +88,7 @@ export default function Regularization() {
 
       <div className="card">
         {rows === null ? <Spinner /> : rows.length === 0
-          ? <EmptyState icon="✎" title="No regularization requests"
+          ? <EmptyState icon={PenLine} title="No regularization requests"
                         hint="Corrections you request will appear here with their approval status." />
           : (
             <div className="table-wrap"><table className="table">

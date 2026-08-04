@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { api } from '../api'
 import MonthCalendar, { MonthNav } from '../components/MonthCalendar'
 import { EmptyState, Spinner, useToast } from '../components/ui'
+import { Users } from '../components/icons'
 
 export default function TeamCalendar() {
   const toast = useToast()
@@ -28,7 +29,7 @@ export default function TeamCalendar() {
 
   if (members === null) return <Spinner />
   if (members.length === 0) {
-    return <div className="card"><EmptyState icon="👥" title="No team members"
+    return <div className="card"><EmptyState icon={Users} title="No team members"
       hint="Employees reporting to you will appear here." /></div>
   }
 

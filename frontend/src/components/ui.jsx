@@ -1,12 +1,14 @@
 // Small shared UI primitives.
 import { createContext, useCallback, useContext, useState } from 'react'
+import { ChevronLeft, ChevronRight, Eye, EyeOff, Inbox } from './icons'
 
 export const Spinner = () => <div className="spinner" role="status" aria-label="Loading" />
 
-export function EmptyState({ icon = '📭', title, hint }) {
+export function EmptyState({ icon, title, hint }) {
+  const Icon = icon || Inbox
   return (
     <div className="empty">
-      <div className="big">{icon}</div>
+      <div className="big"><Icon size={30} strokeWidth={1.5} /></div>
       <h4>{title}</h4>
       {hint && <div>{hint}</div>}
     </div>
@@ -57,6 +59,22 @@ export function ConfirmDialog({ title, message, confirmLabel = 'Confirm', danger
   )
 }
 
+// Password input with a show/hide toggle. Drop-in replacement for
+// <input type="password" className="input" .../> — forwards all other props.
+export function PasswordInput({ inputClassName = 'input', ...props }) {
+  const [show, setShow] = useState(false)
+  return (
+    <div className="password-field">
+      <input className={inputClassName} type={show ? 'text' : 'password'} {...props} />
+      <button type="button" className="password-toggle" tabIndex={-1}
+              onClick={() => setShow((s) => !s)}
+              aria-label={show ? 'Hide password' : 'Show password'}>
+        {show ? <EyeOff size={16} /> : <Eye size={16} />}
+      </button>
+    </div>
+  )
+}
+
 export function Field({ label, required, children, error, help }) {
   return (
     <div className="field">
@@ -74,8 +92,10 @@ export function Pagination({ page, pageSize, total, onPage }) {
   return (
     <div className="pagination">
       <span>Page {page} of {pages} · {total} records</span>
-      <button className="btn secondary sm" disabled={page <= 1} onClick={() => onPage(page - 1)}>← Prev</button>
-      <button className="btn secondary sm" disabled={page >= pages} onClick={() => onPage(page + 1)}>Next →</button>
+      <button className="btn secondary sm" disabled={page <= 1} onClick={() => onPage(page - 1)}>
+        <ChevronLeft size={14} /> Prev</button>
+      <button className="btn secondary sm" disabled={page >= pages} onClick={() => onPage(page + 1)}>
+        Next <ChevronRight size={14} /></button>
     </div>
   )
 }

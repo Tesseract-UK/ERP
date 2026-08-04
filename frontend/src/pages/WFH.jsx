@@ -2,58 +2,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '../api'
 import {
-  ConfirmDialog, EmptyState, Field, Modal, Spinner, StatusBadge, fmtDate, useToast,
+  ConfirmDialog, EmptyState, Modal, Spinner, StatusBadge, fmtDate, useToast,
 } from '../components/ui'
-
-function ApplyModal({ onClose, onDone }) {
-  const toast = useToast()
-  const [date, setDate] = useState('')
-  const [reason, setReason] = useState('')
-  const [file, setFile] = useState(null)
-  const [busy, setBusy] = useState(false)
-
-  const submit = async (e) => {
-    e.preventDefault()
-    setBusy(true)
-    try {
-      const fd = new FormData()
-      fd.append('date', date)
-      fd.append('reason', reason)
-      if (file) fd.append('document', file)
-      await api.postForm('/wfh', fd)
-      toast('WFH request submitted for approval', 'success')
-      onDone()
-    } catch (err) {
-      toast(err.message, 'error')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  return (
-    <Modal title="Request Work From Home" onClose={onClose} footer={
-      <>
-        <button className="btn secondary" onClick={onClose}>Cancel</button>
-        <button className="btn" form="wfh-form" disabled={busy}>{busy ? 'Submitting…' : 'Submit Request'}</button>
-      </>
-    }>
-      <form id="wfh-form" onSubmit={submit}>
-        <Field label="Date" required>
-          <input className="input" type="date" required value={date} onChange={(e) => setDate(e.target.value)} />
-        </Field>
-        <Field label="Reason" required>
-          <textarea className="input" required minLength={3} value={reason}
-                    onChange={(e) => setReason(e.target.value)}
-                    placeholder="Why do you need to work from home?" />
-        </Field>
-        <Field label="Supporting document (optional)">
-          <input className="input" type="file" accept=".pdf,.png,.jpg,.jpeg,.doc,.docx"
-                 onChange={(e) => setFile(e.target.files[0])} />
-        </Field>
-      </form>
-    </Modal>
-  )
-}
+import { Home } from '../components/icons'
+import { WfhApplyForm } from '../components/RequestForms'
 
 export default function WFH() {
   const toast = useToast()
@@ -103,7 +55,7 @@ export default function WFH() {
       <div className="card">
         <div className="card-head"><h3>WFH History</h3></div>
         {rows === null ? <Spinner /> : rows.length === 0
-          ? <EmptyState icon="🏠" title="No WFH requests yet" hint="Your work-from-home requests will appear here." />
+          ? <EmptyState icon={Home} title="No WFH requests yet" hint="Your work-from-home requests will appear here." />
           : (
             <div className="table-wrap"><table className="table">
               <thead><tr><th>Date</th><th>Reason</th><th>Status</th><th>Reviewed By</th><th></th></tr></thead>
@@ -124,7 +76,12 @@ export default function WFH() {
           )}
       </div>
 
-      {showApply && <ApplyModal onClose={() => setShowApply(false)} onDone={() => { setShowApply(false); load() }} />}
+      {showApply && (
+        <Modal title="Request Work From Home" onClose={() => setShowApply(false)}>
+          <WfhApplyForm onCancel={() => setShowApply(false)}
+                        onDone={() => { setShowApply(false); load() }} />
+        </Modal>
+      )}
       {cancelId && <ConfirmDialog title="Cancel WFH request" danger busy={busy}
         message="Are you sure you want to cancel this pending WFH request?"
         confirmLabel="Yes, cancel it" onConfirm={cancel} onClose={() => setCancelId(null)} />}

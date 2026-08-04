@@ -6,6 +6,7 @@ import { useAuth } from '../AuthContext'
 import {
   EmptyState, Spinner, StatusBadge, fmtDate, fmtHours, fmtTime, titleCase, useToast,
 } from '../components/ui'
+import { AlertTriangle, ArrowRight, Cake, CalendarDays, Megaphone } from '../components/icons'
 
 function Stat({ label, value, sub }) {
   return (
@@ -87,7 +88,7 @@ export default function Dashboard() {
   }, [])
   useEffect(load, [load])
 
-  if (error) return <EmptyState icon="⚠️" title="Could not load dashboard" hint={error} />
+  if (error) return <EmptyState icon={AlertTriangle} title="Could not load dashboard" hint={error} />
   if (!data) return <Spinner />
 
   const att = data.today_attendance
@@ -99,7 +100,7 @@ export default function Dashboard() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div className="page-head" style={{ marginBottom: 0 }}>
         <div>
-          <h2>Hello, {user.full_name.split(' ')[0]} 👋</h2>
+          <h2>Hello, {user.full_name.split(' ')[0]}</h2>
           <div className="sub">{new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</div>
         </div>
         {att && <StatusBadge status={att.status} />}
@@ -120,7 +121,8 @@ export default function Dashboard() {
       {org && (
         <div className="card">
           <div className="card-head"><h3>{data.organization ? 'Organization Today' : 'My Team Today'}</h3>
-            {user.role !== 'employee' && <Link className="btn secondary sm" to="/approvals">Review approvals →</Link>}
+            {user.role !== 'employee' && <Link className="btn secondary sm" to="/approvals">
+              Review approvals <ArrowRight size={14} /></Link>}
           </div>
           <div className="card-body grid cols-4" style={{ padding: 14 }}>
             <Stat label="Members" value={org.total_members} />
@@ -135,7 +137,7 @@ export default function Dashboard() {
         <div className="card">
           <div className="card-head"><h3>Upcoming Holidays</h3></div>
           <div className="card-body">
-            {data.upcoming_holidays.length === 0 && <EmptyState icon="🗓" title="No holidays in the next 30 days" />}
+            {data.upcoming_holidays.length === 0 && <EmptyState icon={CalendarDays} title="No holidays in the next 30 days" />}
             {data.upcoming_holidays.map((h) => (
               <div key={h.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '7px 0', borderBottom: '1px solid var(--border)' }}>
                 <span>{h.name} <span className="badge neutral">{titleCase(h.holiday_type)}</span></span>
@@ -145,9 +147,9 @@ export default function Dashboard() {
           </div>
         </div>
         <div className="card">
-          <div className="card-head"><h3>Birthdays 🎂</h3></div>
+          <div className="card-head"><h3>Birthdays</h3></div>
           <div className="card-body">
-            {data.birthdays.length === 0 && <EmptyState icon="🎈" title="No birthdays coming up" />}
+            {data.birthdays.length === 0 && <EmptyState icon={Cake} title="No birthdays coming up" />}
             {data.birthdays.map((b, i) => (
               <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '7px 0', borderBottom: '1px solid var(--border)' }}>
                 <span>{b.name}</span><strong>{fmtDate(b.date)}</strong>
@@ -158,7 +160,7 @@ export default function Dashboard() {
         <div className="card">
           <div className="card-head"><h3>Announcements</h3></div>
           <div className="card-body">
-            {data.announcements.length === 0 && <EmptyState icon="📢" title="No announcements yet" />}
+            {data.announcements.length === 0 && <EmptyState icon={Megaphone} title="No announcements yet" />}
             {data.announcements.map((a) => (
               <div key={a.id} style={{ padding: '7px 0', borderBottom: '1px solid var(--border)' }}>
                 <div style={{ fontWeight: 600 }}>{a.title}</div>
