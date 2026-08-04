@@ -5,13 +5,14 @@ import uuid
 from datetime import date, datetime, timedelta
 
 from fastapi import HTTPException, UploadFile
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from .config import (
     HALF_DAY_THRESHOLD_HOURS, LATE_ARRIVAL_TIME, MAX_UPLOAD_SIZE,
     STANDARD_WORK_HOURS, UPLOAD_DIR,
 )
-from .models import Attendance, AuditLog, Holiday, Notification
+from .models import Attendance, AuditLog, Holiday, Notification, User
 
 ALLOWED_UPLOAD_EXTENSIONS = {".pdf", ".png", ".jpg", ".jpeg", ".doc", ".docx"}
 
@@ -26,6 +27,11 @@ def check_email_domain(email: str) -> None:
         allowed = ", ".join(f"@{d}" for d in ALLOWED_EMAIL_DOMAINS)
         raise HTTPException(status_code=403,
                             detail=f"Only {allowed} accounts can be used")
+
+
+def generate_employee_code(db: Session) -> str:
+    count = db.query(func.count(User.id)).scalar() or 0
+    return f"EMP{count + 1:04d}"
 
 
 def audit(db: Session, user_id: int | None, action: str, module: str,

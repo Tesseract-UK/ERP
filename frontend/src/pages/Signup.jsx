@@ -4,8 +4,9 @@ import { useAuth } from '../AuthContext'
 import { Field, PasswordInput } from '../components/ui'
 import { Logo } from '../components/icons'
 
-export default function Login() {
-  const { login } = useAuth()
+export default function Signup() {
+  const { signup } = useAuth()
+  const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -16,7 +17,7 @@ export default function Login() {
     setError('')
     setBusy(true)
     try {
-      await login(email.trim(), password)
+      await signup(fullName.trim(), email.trim(), password)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -28,22 +29,28 @@ export default function Login() {
     <div className="login-wrap">
       <form className="login-card" onSubmit={submit}>
         <div className="logo"><Logo size={19} /> Tesseract HRMS</div>
-        <div className="tag">Sign in to your workspace</div>
+        <div className="tag">Create your workspace account</div>
+        <Field label="Full name" required>
+          <input className="input" type="text" value={fullName} required autoFocus
+                 autoComplete="name"
+                 onChange={(e) => setFullName(e.target.value)} placeholder="Your name" />
+        </Field>
         <Field label="Email address" required>
-          <input className="input" type="email" value={email} required autoFocus
+          <input className="input" type="email" value={email} required
                  autoComplete="username"
                  onChange={(e) => setEmail(e.target.value)} placeholder="you@tesseractuk.in" />
         </Field>
-        <Field label="Password" required error={error}>
-          <PasswordInput value={password} required
-                 autoComplete="current-password"
+        <Field label="Password" required error={error}
+               help={!error ? 'At least 8 characters' : undefined}>
+          <PasswordInput value={password} required minLength={8}
+                 autoComplete="new-password"
                  onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" />
         </Field>
         <button className="btn" style={{ width: '100%', marginTop: 6 }} disabled={busy}>
-          {busy ? 'Signing in…' : 'Sign In'}
+          {busy ? 'Creating account…' : 'Sign Up'}
         </button>
         <div className="tag" style={{ marginTop: 14 }}>
-          New here? <Link to="/signup">Create an account</Link>
+          Already have an account? <Link to="/login">Sign in</Link>
         </div>
       </form>
     </div>

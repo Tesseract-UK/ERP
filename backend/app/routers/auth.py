@@ -5,12 +5,40 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..deps import client_info, get_current_user
 from ..models import User
-from ..schemas import ChangePasswordRequest, LoginRequest, SetPasswordRequest
+from ..schemas import ChangePasswordRequest, LoginRequest, SetPasswordRequest, SignupRequest
 from ..security import create_access_token, hash_password, verify_password
 from ..serializers import user_full
-from ..utils import audit, check_email_domain, notify
+from ..utils import audit, check_email_domain, generate_employee_code, notify
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+@router.post("/signup")
+def signup(body: SignupRequest, request: Request, db: Session = Depends(get_db)):
+    """Self-service account creation. Anyone with an allowed company email
+    domain can register and is signed in immediately — no admin approval."""
+    check_email_domain(body.email)
+    email = body.email.lower()
+    if db.query(User).filter(User.email == email).first():
+        raise HTTPException(status_code=400, detail="An account with this email already exists")
+
+    user = User(
+        email=email,
+        full_name=body.full_name,
+        employee_code=generate_employee_code(db),
+        password_hash=hash_password(body.password),
+        role="employee",
+    )
+    db.add(user)
+    audit(db, None, "signup", "auth", f"Self-signup: {body.full_name} ({email})",
+          client=client_info(request))
+    db.commit()
+    db.refresh(user)
+    return {
+        "access_token": create_access_token(user.id, user.role),
+        "token_type": "bearer",
+        "user": user_full(user),
+    }
 
 
 @router.post("/login")
