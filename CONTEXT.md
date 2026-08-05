@@ -60,26 +60,34 @@ Clerk dev instance: `peaceful-reptile-39.clerk.accounts.dev` (test keys, see
 
 ## Deployment status
 
-- **GitHub**: `github.com/Tesseract-UK/ERP`, branch `main`. Both Render and
-  Vercel appear to auto-deploy on push (observed: a prior "deployment"
-  commit went live without any manual deploy step).
+- **GitHub**: `github.com/Tesseract-UK/ERP`, branch `main`, up to date with
+  all Clerk work pushed.
+- **Auto-deploy is NOT confirmed** — pushed twice (Clerk migration, then
+  CONTEXT.md) and `payroll.tesseractuk.in`'s served JS bundle hash did not
+  change either time. Don't assume push-to-deploy works for this project;
+  a manual deploy (dashboard "Redeploy" or `vercel --prod` from the right
+  account) is likely required, at least until proven otherwise.
 - **Backend (Render)**: `CLERK_SECRET_KEY` / `CLERK_PUBLISHABLE_KEY` env vars
   have been added manually in the Render dashboard (not in git —
-  `render.yaml` marks them `sync: false` on purpose).
-- **Frontend (Vercel)**: **not yet confirmed working.** Production URL is
-  `payroll.tesseractuk.in`. The Vercel account/team available to the CLI in
-  past sessions (`tesseract5`, user `unnayanm-8127`) does **not** own this
-  domain — `vercel domains ls` returns 0 domains under that team. There was
-  also an earlier, different logged-in account (`vaishnavitesseractuk-milk`)
-  whose only project was an unrelated `vaishnavimilk.com` — do not touch that
-  one, it's not part of this app.
+  `render.yaml` marks them `sync: false` on purpose). Not yet confirmed
+  whether Render redeployed after those were added.
+- **Frontend (Vercel)**: **not working yet — blocked on finding the right
+  Vercel account.** Production URL is `payroll.tesseractuk.in`. Checked two
+  Vercel accounts/teams so far via CLI, neither owns this domain
+  (`vercel domains ls` → 0 domains in both):
+  - `vaishnavitesseractuk-milk` — only project is an unrelated
+    `vaishnavimilk.com`. **Do not touch this one**, not part of this app.
+  - `tesseract5` (user `unnayanm-8127`) — has a `frontend` project (matches
+    this repo, recently updated) but no custom domain attached to it or
+    anything else in the team.
   **Still needed:** find/log into whichever Vercel account actually owns
   `payroll.tesseractuk.in`, then add env var `VITE_CLERK_PUBLISHABLE_KEY`
-  (same value as `CLERK_PUBLISHABLE_KEY` on the backend) and redeploy.
+  (same value as `CLERK_PUBLISHABLE_KEY` on the backend) and deploy.
   Verify by checking the live JS bundle references Clerk:
-  `curl -s https://payroll.tesseractuk.in/ | grep assets` to get the current
-  hashed bundle name, then `curl -s <bundle-url> | grep -o Clerk` — empty
-  output means the deployed build predates the Clerk migration.
+  `curl -s https://payroll.tesseractuk.in/ | grep -o 'assets/index-[^"]*\.js'`
+  to get the current hashed bundle name, then
+  `curl -s https://payroll.tesseractuk.in/<that path> | grep -o Clerk` —
+  empty output means the deployed build predates the Clerk migration.
 
 ## Design system
 
