@@ -39,6 +39,10 @@ def _ensure_new_columns():
             conn.execute(text(
                 "ALTER TABLE users ADD COLUMN profile_completed BOOLEAN DEFAULT TRUE"))
             conn.execute(text("UPDATE users SET profile_completed = TRUE"))
+        if "clerk_user_id" not in existing:
+            conn.execute(text("ALTER TABLE users ADD COLUMN clerk_user_id VARCHAR(64)"))
+            conn.execute(text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS ix_users_clerk_user_id ON users (clerk_user_id)"))
 
 
 _ensure_new_columns()

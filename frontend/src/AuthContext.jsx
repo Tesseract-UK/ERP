@@ -1,43 +1,64 @@
-import { createContext, useContext, useEffect, useState } from 'react'
-import { api, getToken, setToken, setUnauthorizedHandler } from './api'
+// Bridges Clerk's session (who you are) to the HRMS profile (your role,
+// department, onboarding state, etc.) that the rest of the app reads.
+// Also recognizes the admin break-glass login (see AdminEmergencyLogin in
+// Login.jsx), a parallel path that bypasses Clerk entirely.
+import { createContext, useCallback, useContext, useEffect, useState } from 'react'
+import { useAuth as useClerkAuth, useClerk } from '@clerk/clerk-react'
+import { api, getLegacyToken, setLegacyToken, setUnauthorizedHandler } from './api'
 
 const AuthContext = createContext(null)
 
 export function AuthProvider({ children }) {
+  const { isLoaded, isSignedIn } = useClerkAuth()
+  const { signOut } = useClerk()
   const [user, setUser] = useState(null)
-  const [loading, setLoading] = useState(!!getToken())
+  const [profileLoading, setProfileLoading] = useState(true)
+  const [authError, setAuthError] = useState('')
+
+  const refresh = useCallback(() => {
+    const legacy = getLegacyToken()
+    if (!isSignedIn && !legacy) {
+      setUser(null)
+      setProfileLoading(false)
+      return
+    }
+    setProfileLoading(true)
+    api.get('/auth/me')
+      .then((u) => { setUser(u); setAuthError('') })
+      .catch((err) => {
+        // Either Clerk accepted this identity but our backend won't sync a
+        // profile for it (wrong email domain, deactivated account, etc), or
+        // a stored break-glass token was rejected. Clear whichever path was
+        // active — otherwise the route guard keeps bouncing to /login while
+        // that session still looks "active", forming a redirect loop.
+        setUser(null)
+        setAuthError(err.message || 'Could not sign you in.')
+        if (legacy) setLegacyToken(null)
+        else signOut()
+      })
+      .finally(() => setProfileLoading(false))
+  }, [isSignedIn, signOut])
 
   useEffect(() => {
     setUnauthorizedHandler(() => setUser(null))
-    if (getToken()) {
-      api.get('/auth/me')
-        .then(setUser)
-        .catch(() => setToken(null))
-        .finally(() => setLoading(false))
-    }
   }, [])
 
-  const login = async (email, password) => {
-    const data = await api.post('/auth/login', { email, password })
-    setToken(data.access_token)
-    setUser(data.user)
-  }
-
-  const signup = async (fullName, email, password) => {
-    const data = await api.post('/auth/signup', {
-      full_name: fullName, email, password,
-    })
-    setToken(data.access_token)
-    setUser(data.user)
-  }
+  useEffect(() => {
+    if (!isLoaded) return
+    refresh()
+  }, [isLoaded, refresh])
 
   const logout = () => {
-    setToken(null)
     setUser(null)
+    setLegacyToken(null)
+    signOut()
   }
 
   return (
-    <AuthContext.Provider value={{ user, setUser, login, signup, logout, loading }}>
+    <AuthContext.Provider value={{
+      user, setUser, refresh, logout, authError,
+      loading: !isLoaded || profileLoading,
+    }}>
       {children}
     </AuthContext.Provider>
   )

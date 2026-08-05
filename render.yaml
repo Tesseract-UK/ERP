@@ -17,6 +17,10 @@ services:
         value: https://your-frontend.vercel.app  # update after Vercel deploy
       - key: PYTHON_VERSION
         value: 3.11.9
+      - key: CLERK_SECRET_KEY
+        sync: false  # set manually in the Render dashboard — do not commit this value
+      - key: CLERK_PUBLISHABLE_KEY
+        sync: false  # set manually in the Render dashboard
 
 databases:
   - name: tesseract-hrms-db

@@ -1,15 +1,20 @@
-// Minimal fetch-based API client with JWT handling.
+// Minimal fetch-based API client. Auth is normally Clerk's session token,
+// fetched fresh for every request from the global Clerk instance (mounted
+// by <ClerkProvider> in main.jsx). The one exception is the admin
+// break-glass login (see AdminEmergencyLogin in Login.jsx), which bypasses
+// Clerk entirely — its token is stored locally and takes priority when present.
 const BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+
+const LEGACY_TOKEN_KEY = 'hrms_admin_token'
+export const getLegacyToken = () => localStorage.getItem(LEGACY_TOKEN_KEY)
+export const setLegacyToken = (t) => t ? localStorage.setItem(LEGACY_TOKEN_KEY, t) : localStorage.removeItem(LEGACY_TOKEN_KEY)
 
 let onUnauthorized = () => {}
 export const setUnauthorizedHandler = (fn) => { onUnauthorized = fn }
 
-export const getToken = () => localStorage.getItem('hrms_token')
-export const setToken = (t) => t ? localStorage.setItem('hrms_token', t) : localStorage.removeItem('hrms_token')
-
 async function request(path, { method = 'GET', body, formData } = {}) {
   const headers = {}
-  const token = getToken()
+  const token = getLegacyToken() || await window.Clerk?.session?.getToken()
   if (token) headers.Authorization = `Bearer ${token}`
   if (body) headers['Content-Type'] = 'application/json'
 
@@ -20,7 +25,7 @@ async function request(path, { method = 'GET', body, formData } = {}) {
   })
 
   if (res.status === 401) {
-    setToken(null)
+    setLegacyToken(null)
     onUnauthorized()
     throw new Error('Session expired. Please sign in again.')
   }

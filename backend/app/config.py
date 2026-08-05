@@ -1,4 +1,5 @@
 """Application configuration loaded from environment variables."""
+import base64
 import os
 from dotenv import load_dotenv
 
@@ -29,3 +30,25 @@ MAX_UPLOAD_SIZE = 5 * 1024 * 1024  # 5 MB
 STANDARD_WORK_HOURS = float(os.getenv("STANDARD_WORK_HOURS", "8"))
 HALF_DAY_THRESHOLD_HOURS = float(os.getenv("HALF_DAY_THRESHOLD_HOURS", "4"))
 LATE_ARRIVAL_TIME = os.getenv("LATE_ARRIVAL_TIME", "09:30")  # HH:MM, 24h
+
+# Clerk (sign-in / sign-up, including Google). The Frontend API host — and
+# from it the JWKS endpoint used to verify session tokens — is encoded
+# inside the publishable key, so only the two keys need to be configured.
+CLERK_SECRET_KEY = os.getenv("CLERK_SECRET_KEY", "")
+CLERK_PUBLISHABLE_KEY = os.getenv("CLERK_PUBLISHABLE_KEY", "")
+
+
+def _clerk_frontend_api(publishable_key: str) -> str | None:
+    if not publishable_key or "_" not in publishable_key:
+        return None
+    try:
+        encoded = publishable_key.split("_", 2)[2]
+        padded = encoded + "=" * (-len(encoded) % 4)
+        domain = base64.b64decode(padded).decode().rstrip("$")
+        return f"https://{domain}"
+    except Exception:
+        return None
+
+
+CLERK_FRONTEND_API = _clerk_frontend_api(CLERK_PUBLISHABLE_KEY)
+CLERK_JWKS_URL = f"{CLERK_FRONTEND_API}/.well-known/jwks.json" if CLERK_FRONTEND_API else None

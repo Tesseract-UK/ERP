@@ -1,71 +1,10 @@
-// First-login wizard: forced password change, then one-time personal details.
-// The rest of the app stays locked until both steps are complete.
+// First-login wizard: one-time personal details. Authentication itself
+// (password / Google) is handled by Clerk before the user ever reaches here.
 import { useState } from 'react'
 import { api } from '../api'
 import { useAuth } from '../AuthContext'
-import { Field, PasswordInput, useToast } from '../components/ui'
-import { ArrowRight, CheckCircle2, Logo } from '../components/icons'
-
-function StepDots({ step, total }) {
-  return (
-    <div style={{ display: 'flex', gap: 6, justifyContent: 'center', margin: '4px 0 22px' }}>
-      {Array.from({ length: total }).map((_, i) => (
-        <span key={i} style={{
-          width: 26, height: 5, borderRadius: 3,
-          background: i <= step ? 'var(--brand)' : 'var(--border)',
-        }} />
-      ))}
-    </div>
-  )
-}
-
-function PasswordStep({ onDone }) {
-  const toast = useToast()
-  const [pw, setPw] = useState('')
-  const [confirm, setConfirm] = useState('')
-  const [busy, setBusy] = useState(false)
-
-  const submit = async (e) => {
-    e.preventDefault()
-    if (pw !== confirm) {
-      toast('Passwords do not match', 'error')
-      return
-    }
-    setBusy(true)
-    try {
-      const user = await api.post('/auth/set-password', { new_password: pw })
-      toast('Password set. Welcome aboard!', 'success')
-      onDone(user)
-    } catch (err) {
-      toast(err.message, 'error')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  return (
-    <form onSubmit={submit}>
-      <h3 style={{ marginBottom: 4 }}>Set your password</h3>
-      <p className="help-text" style={{ marginBottom: 16 }}>
-        A new password is required to continue — either this is your first sign-in
-        with a password issued by HR, or an admin approved your change request.
-        Choose a password only you know.
-      </p>
-      <Field label="New password" required help="At least 8 characters">
-        <PasswordInput required minLength={8} autoFocus
-               autoComplete="new-password" value={pw} onChange={(e) => setPw(e.target.value)} />
-      </Field>
-      <Field label="Confirm new password" required
-             error={confirm && pw !== confirm ? 'Passwords do not match' : ''}>
-        <PasswordInput required minLength={8}
-               autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
-      </Field>
-      <button className="btn" style={{ width: '100%' }} disabled={busy}>
-        {busy ? 'Saving…' : <>Continue <ArrowRight size={15} /></>}
-      </button>
-    </form>
-  )
-}
+import { Field, useToast } from '../components/ui'
+import { CheckCircle2, Logo } from '../components/icons'
 
 function DetailsStep({ onDone }) {
   const toast = useToast()
@@ -158,23 +97,13 @@ function DetailsStep({ onDone }) {
 
 export default function Onboarding() {
   const { user, setUser, logout } = useAuth()
-  const needsPassword = user.must_change_password
-  const [step, setStep] = useState(needsPassword ? 0 : 1)
-  // Existing users approved for a password change only see the password step.
-  const totalSteps = user.profile_completed ? 1 : 2
 
   return (
     <div className="login-wrap">
       <div className="login-card" style={{ maxWidth: 520 }}>
         <div className="logo"><Logo size={19} /> Tesseract HRMS</div>
-        <div className="tag">
-          {user.profile_completed === false
-            ? <>Welcome, {user.full_name} — let's get you set up</>
-            : <>Hi {user.full_name.split(' ')[0]}, set your new password to continue</>}
-        </div>
-        <StepDots step={step} total={totalSteps} />
-        {step === 0 && <PasswordStep onDone={(u) => { setUser(u); setStep(1) }} />}
-        {step === 1 && <DetailsStep onDone={setUser} />}
+        <div className="tag">Welcome, {user.full_name} — let's get you set up</div>
+        <DetailsStep onDone={setUser} />
         <button className="btn ghost sm" style={{ width: '100%', marginTop: 12 }} onClick={logout}>
           Sign out and continue later
         </button>

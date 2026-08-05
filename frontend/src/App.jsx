@@ -33,16 +33,16 @@ export default function App() {
   const { user, loading } = useAuth()
   if (loading) return <Spinner />
 
-  // New joiners must set a password and complete their profile before
-  // anything else unlocks.
-  if (user && (user.must_change_password || user.profile_completed === false)) {
+  // New joiners must complete their profile before anything else unlocks.
+  if (user && user.profile_completed === false) {
     return <Onboarding />
   }
 
   return (
     <Routes>
-      <Route path="/login" element={user ? <Navigate to="/" replace /> : <Login />} />
-      <Route path="/signup" element={user ? <Navigate to="/" replace /> : <Signup />} />
+      {/* Wildcard paths let Clerk manage its own sub-routes (OAuth callback, MFA, etc.). */}
+      <Route path="/login/*" element={user ? <Navigate to="/" replace /> : <Login />} />
+      <Route path="/signup/*" element={user ? <Navigate to="/" replace /> : <Signup />} />
       <Route element={<Guard><Layout /></Guard>}>
         <Route path="/" element={<Dashboard />} />
         <Route path="/attendance" element={<Attendance />} />

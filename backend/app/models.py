@@ -59,6 +59,10 @@ class User(Base):
     employee_code: Mapped[str] = mapped_column(String(20), unique=True)
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(255))
+    # Set once a user signs in via Clerk (email/password or Google); links
+    # the Clerk identity to this row. Null for accounts that have never
+    # signed in through Clerk.
+    clerk_user_id: Mapped[str | None] = mapped_column(String(64), unique=True, index=True)
     full_name: Mapped[str] = mapped_column(String(150))
     role: Mapped[str] = mapped_column(String(20), default="employee")
     phone: Mapped[str | None] = mapped_column(String(20))
