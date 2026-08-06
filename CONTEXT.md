@@ -4,7 +4,7 @@ Working notes for picking this project back up on any device/session. Static
 architecture docs live in `README.md`; this file is the current state,
 in-flight work, and things a fresh session can't infer from the code alone.
 
-Last updated: 2026-08-05.
+Last updated: 2026-08-06.
 
 ## What this is
 
@@ -62,32 +62,46 @@ Clerk dev instance: `peaceful-reptile-39.clerk.accounts.dev` (test keys, see
 
 - **GitHub**: `github.com/Tesseract-UK/ERP`, branch `main`, up to date with
   all Clerk work pushed.
-- **Auto-deploy is NOT confirmed** — pushed twice (Clerk migration, then
-  CONTEXT.md) and `payroll.tesseractuk.in`'s served JS bundle hash did not
-  change either time. Don't assume push-to-deploy works for this project;
-  a manual deploy (dashboard "Redeploy" or `vercel --prod` from the right
-  account) is likely required, at least until proven otherwise.
+- **Auto-deploy on push is NOT set up / not working** for the Vercel
+  frontend — confirmed by pushing multiple times with no new deployment
+  appearing. **Always deploy the frontend manually** after pushing (see
+  below) until someone fixes the GitHub↔Vercel integration (there was a
+  Vercel "Authorize App" GitHub permissions screen seen mid-session that may
+  be related — worth checking Vercel project → Settings → Git if this needs
+  a real fix).
 - **Backend (Render)**: `CLERK_SECRET_KEY` / `CLERK_PUBLISHABLE_KEY` env vars
-  have been added manually in the Render dashboard (not in git —
-  `render.yaml` marks them `sync: false` on purpose). Not yet confirmed
-  whether Render redeployed after those were added.
-- **Frontend (Vercel)**: **not working yet — blocked on finding the right
-  Vercel account.** Production URL is `payroll.tesseractuk.in`. Checked two
-  Vercel accounts/teams so far via CLI, neither owns this domain
-  (`vercel domains ls` → 0 domains in both):
+  added manually in the Render dashboard by the user. Backend is confirmed
+  live and responding at `https://erp-gksp.onrender.com` (this is the real
+  production API URL — baked into the frontend build as `VITE_API_URL`).
+  Unknown whether Render auto-deploys on push either — not yet stress-tested
+  the way the frontend was.
+- **Frontend (Vercel) — RESOLVED, now deployed with Clerk.** The right
+  project was `tesseract5` team → `frontend` project all along (this is
+  what owns `payroll.tesseractuk.in`) — an earlier check with
+  `vercel domains ls --scope tesseract5` misleadingly returned 0 domains
+  (that command only lists domains *registered through* Vercel, not custom
+  domains *attached* to a project — check the project's dashboard "Domains"
+  section instead, or `vercel inspect <deployment>`, not `vercel domains ls`).
+  Deployed via `cd frontend && vercel link --yes --project frontend --scope
+  tesseract5 && vercel --prod --yes`. Also added
+  `VITE_CLERK_PUBLISHABLE_KEY` as a production env var via
+  `vercel env add VITE_CLERK_PUBLISHABLE_KEY production` (it was missing —
+  the build would otherwise throw, since `main.jsx` hard-fails without it).
+  Verified: live bundle hash changed and now contains "Clerk".
+  Other Vercel accounts checked and ruled out along the way — leave alone:
   - `vaishnavitesseractuk-milk` — only project is an unrelated
-    `vaishnavimilk.com`. **Do not touch this one**, not part of this app.
-  - `tesseract5` (user `unnayanm-8127`) — has a `frontend` project (matches
-    this repo, recently updated) but no custom domain attached to it or
-    anything else in the team.
-  **Still needed:** find/log into whichever Vercel account actually owns
-  `payroll.tesseractuk.in`, then add env var `VITE_CLERK_PUBLISHABLE_KEY`
-  (same value as `CLERK_PUBLISHABLE_KEY` on the backend) and deploy.
-  Verify by checking the live JS bundle references Clerk:
-  `curl -s https://payroll.tesseractuk.in/ | grep -o 'assets/index-[^"]*\.js'`
-  to get the current hashed bundle name, then
-  `curl -s https://payroll.tesseractuk.in/<that path> | grep -o Clerk` —
-  empty output means the deployed build predates the Clerk migration.
+    `vaishnavimilk.com`. **Not part of this app, do not touch.**
+
+**To redeploy the frontend after future pushes** (until auto-deploy is
+fixed):
+```bash
+cd frontend
+vercel link --yes --project frontend --scope tesseract5   # if not already linked
+vercel --prod --yes
+```
+Verify: `curl -s https://payroll.tesseractuk.in/ | grep -o 'assets/index-[^"]*\.js'`
+then `curl -s https://payroll.tesseractuk.in/<that path> | grep -o Clerk` —
+non-empty output confirms the current build is live.
 
 ## Design system
 
@@ -115,15 +129,20 @@ break-glass restriction).
 
 ## Open items / next steps
 
-1. Get the Vercel deployment for `payroll.tesseractuk.in` actually serving
-   the Clerk-based build (see Deployment status above).
-2. Once live, do a real end-to-end test: Google sign-in in production,
-   confirm domain restriction error text, confirm a fresh sign-up shows up
-   in Employees for role/manager assignment.
+1. Do a real end-to-end test on production: Google sign-in at
+   `payroll.tesseractuk.in`, confirm domain restriction error text, confirm
+   a fresh sign-up shows up in Employees for role/manager assignment.
+2. Fix Vercel auto-deploy-on-push (currently must deploy manually — see
+   Deployment status above), and check whether Render has the same problem.
 3. Production Clerk keys: currently using `pk_test_.../sk_test_...` (Clerk
-   dev instance). Before real users depend on this, switch to a Clerk
-   **Production** instance and its `pk_live_.../sk_live_...` keys.
-4. The old password-management UI (Employees → "Reset PW" / "Allow PW
+   dev instance) in both local dev AND production. Before real users depend
+   on this, switch production to a Clerk **Production** instance and its
+   `pk_live_.../sk_live_...` keys instead.
+4. Production Postgres has no seed data (the admin break-glass login
+   returned "Invalid email or password" for `admin@tesseractuk.in` there) —
+   decide how the first production admin account gets created: run
+   `python -m app.seed` via a Render shell, or create one by hand.
+5. The old password-management UI (Employees → "Reset PW" / "Allow PW
    Change", Profile → change password) is now vestigial for non-admin users
    since Clerk owns credentials for everyone else — flagged to the user,
    not yet removed/hidden (their call whether to clean it up).
