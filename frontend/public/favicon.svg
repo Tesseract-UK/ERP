@@ -1,18 +1,11 @@
-// Central icon set for the whole app — thin line icons only, no emoji anywhere.
-export {
-  LayoutDashboard, Clock, Plane, Home, PenLine, User, CheckSquare, Users,
-  CalendarDays, IdCard, ClipboardList, BarChart3, Megaphone, Building2,
-  ShieldCheck, Bell, Menu, Inbox, ChevronLeft, ChevronRight, AlertTriangle,
-  Cake, CheckCircle2, Download, X, LogOut, ArrowRight, Eye, EyeOff,
-} from 'lucide-react'
+<?xml version="1.0" standalone="no"?>
+<svg version="1.0" xmlns="http://www.w3.org/2000/svg"
+ width="1024.000000pt" height="1024.000000pt" viewBox="0 0 1024.000000 1024.000000"
+ preserveAspectRatio="xMidYMid meet">
 
-// The app's logo mark (from Assests/WithoutBg.svg). Inherits color via
-// currentColor so it tints correctly wherever it's placed (sidebar, login).
-export function Logo({ size = 20 }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
-      <g transform="translate(0,1024) scale(0.1,-0.1)" fill="currentColor" stroke="none">
-        <path d="M5003 8370 c-45 -16 -158 -81 -678 -390 -71 -42 -263 -155 -425 -250
+<g transform="translate(0.000000,1024.000000) scale(0.100000,-0.100000)"
+fill="#3395ff" stroke="none">
+<path d="M5003 8370 c-45 -16 -158 -81 -678 -390 -71 -42 -263 -155 -425 -250
 -162 -95 -365 -215 -450 -265 -85 -51 -222 -132 -305 -180 -82 -49 -154 -91
 -158 -95 -5 -4 4 -14 20 -22 29 -15 245 -140 341 -196 29 -18 63 -34 76 -38
 24 -6 170 78 926 529 157 94 339 202 405 240 66 39 173 103 237 144 65 40 120
@@ -26,7 +19,7 @@ export function Logo({ size = 20 }) {
 -44 157 -103 213 -28 26 -149 103 -282 179 -129 74 -337 195 -464 269 -126 74
 -309 180 -405 236 -96 56 -281 164 -410 240 -129 76 -318 187 -420 246 -102
 59 -230 135 -285 169 -256 155 -315 181 -407 180 -35 0 -86 -9 -115 -19z"/>
-        <path d="M4879 7525 c-37 -24 -131 -81 -210 -126 -79 -45 -156 -91 -171 -101
+<path d="M4879 7525 c-37 -24 -131 -81 -210 -126 -79 -45 -156 -91 -171 -101
 l-28 -19 0 -670 c0 -368 -2 -669 -5 -669 -3 0 -70 38 -148 83 -157 93 -789
 466 -1041 614 -460 273 -601 353 -620 353 -27 0 -157 -76 -212 -123 -22 -20
 -56 -64 -75 -99 l-34 -63 -6 -385 c-9 -483 -7 -2177 2 -2366 11 -249 59 -334
@@ -38,7 +31,7 @@ l-28 -19 0 -670 c0 -368 -2 -669 -5 -669 -3 0 -70 38 -148 83 -157 93 -789
 -134 -303 -176 -71 -43 -200 -118 -285 -167 -454 -262 -440 -254 -441 -282 -2
 -88 3 -517 7 -521 3 -2 14 1 24 8 54 34 1273 754 1625 960 132 77 250 148 263
 157 l22 16 0 1079 c0 594 -3 1080 -7 1080 -5 0 -38 -20 -74 -45z"/>
-        <path d="M7795 6186 c-49 -30 -151 -89 -225 -133 l-135 -80 4 -1009 4 -1010
+<path d="M7795 6186 c-49 -30 -151 -89 -225 -133 l-135 -80 4 -1009 4 -1010
 -29 -31 c-26 -27 -185 -124 -869 -528 -464 -274 -948 -563 -1059 -631 -65 -41
 -121 -73 -123 -71 -1 2 -2 389 -1 861 l3 856 140 -83 c77 -46 264 -157 415
 -247 151 -89 334 -198 405 -240 72 -43 161 -96 200 -118 l69 -41 46 27 c26 15
@@ -51,7 +44,5 @@ l-28 -19 0 -670 c0 -368 -2 -669 -5 -669 -3 0 -70 38 -148 83 -157 93 -789
 -1119 30 -25 c53 -45 135 -70 230 -70 76 0 93 4 160 35 41 19 489 283 995 588
 506 304 1038 623 1183 709 266 159 325 203 367 276 54 93 54 93 58 1368 2 816
 0 1177 -8 1177 -5 -1 -50 -25 -100 -54z"/>
-      </g>
-    </svg>
-  )
-}
+</g>
+</svg>
