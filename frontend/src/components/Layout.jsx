@@ -103,7 +103,7 @@ export default function Layout() {
     <div className="shell">
       {menuOpen && <div className="sidebar-backdrop" onClick={() => setMenuOpen(false)} />}
       <aside className={`sidebar${menuOpen ? ' open' : ''}`}>
-        <div className="logo"><span className="cube"><Logo size={19} /></span> Tesseract HRMS</div>
+        <div className="logo"><Logo size={22} /><span>Tesseract HRMS</span></div>
         <nav>
           {NAV.filter((s) => !s.roles || s.roles.includes(user.role)).map((s) => (
             <div key={s.section}>

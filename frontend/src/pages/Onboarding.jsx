@@ -101,7 +101,7 @@ export default function Onboarding() {
   return (
     <div className="login-wrap">
       <div className="login-card" style={{ maxWidth: 520 }}>
-        <div className="logo"><Logo size={19} /> Tesseract HRMS</div>
+        <div className="logo"><Logo size={24} /><span>Tesseract HRMS</span></div>
         <div className="tag">Welcome, {user.full_name} — let's get you set up</div>
         <DetailsStep onDone={setUser} />
         <button className="btn ghost sm" style={{ width: '100%', marginTop: 12 }} onClick={logout}>

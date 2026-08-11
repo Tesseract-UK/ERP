@@ -24,7 +24,9 @@ async function request(path, { method = 'GET', body, formData } = {}) {
     body: formData || (body ? JSON.stringify(body) : undefined),
   })
 
-  if (res.status === 401) {
+  if (res.status === 401 && token) {
+    // We believed we were authenticated (a token was sent) but got rejected
+    // — that's a real expired/invalid session, not a login attempt.
     setLegacyToken(null)
     onUnauthorized()
     throw new Error('Session expired. Please sign in again.')

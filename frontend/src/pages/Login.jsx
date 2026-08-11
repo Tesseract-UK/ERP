@@ -65,7 +65,7 @@ export default function Login() {
   return (
     <div className="login-wrap">
       <div style={{ width: '100%', maxWidth: 400, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-        <div className="logo" style={{ marginBottom: 22 }}><Logo size={20} /> Tesseract HRMS</div>
+        <div className="logo" style={{ marginBottom: 22 }}><Logo size={24} /><span>Tesseract HRMS</span></div>
         {authError && (
           <div className="error-text" style={{ textAlign: 'center', marginBottom: 14 }}>{authError}</div>
         )}

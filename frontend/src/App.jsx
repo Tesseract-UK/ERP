@@ -15,6 +15,7 @@ import Approvals from './pages/Approvals'
 import Team from './pages/Team'
 import TeamCalendar from './pages/TeamCalendar'
 import Employees from './pages/Employees'
+import EmployeeDetail from './pages/EmployeeDetail'
 import Policies from './pages/Policies'
 import Reports from './pages/Reports'
 import Announcements from './pages/Announcements'
@@ -54,6 +55,7 @@ export default function App() {
         <Route path="/team" element={<Guard roles={['manager', 'hr']}><Team /></Guard>} />
         <Route path="/team-calendar" element={<Guard roles={['manager', 'hr']}><TeamCalendar /></Guard>} />
         <Route path="/employees" element={<Guard roles={['hr']}><Employees /></Guard>} />
+        <Route path="/employees/:id" element={<Guard roles={['hr']}><EmployeeDetail /></Guard>} />
         <Route path="/policies" element={<Guard roles={['hr']}><Policies /></Guard>} />
         <Route path="/reports" element={<Guard roles={['hr']}><Reports /></Guard>} />
         <Route path="/announcements" element={<Guard roles={['hr']}><Announcements /></Guard>} />

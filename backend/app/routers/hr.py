@@ -11,13 +11,17 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..deps import client_info, require_admin, require_hr
 from ..models import (
-    Attendance, EmployeeDocument, Holiday, LeavePolicy, LeaveRequest, User,
+    Attendance, EmployeeDocument, Holiday, LeavePolicy, LeaveRequest,
+    RegularizationRequest, User, WFHRequest,
 )
 from ..schemas import (
-    EmployeeUpsertRequest, HolidayRequest, PolicyUpdateRequest, ResetPasswordRequest,
+    EmployeeUpsertRequest, HolidayRequest, PolicyUpdateRequest,
+    ResetPasswordRequest, SetManagerRequest,
 )
 from ..security import hash_password
-from ..serializers import holiday_out, user_brief, user_full
+from ..serializers import (
+    holiday_out, leave_out, regularization_out, user_brief, user_full, wfh_out,
+)
 from ..utils import audit, check_email_domain, notify, save_upload
 
 router = APIRouter(prefix="/hr", tags=["hr"])
@@ -30,6 +34,8 @@ def list_employees(
     user: User = Depends(require_hr), db: Session = Depends(get_db),
     search: str | None = None, department_id: int | None = None,
     include_inactive: bool = False,
+    manager_id: int | None = None,  # direct reports of this manager
+    unassigned: bool = False,       # active employees with no manager set
     page: int = Query(1, ge=1), page_size: int = Query(25, ge=1, le=100),
 ):
     q = db.query(User)
@@ -41,6 +47,10 @@ def list_employees(
                          User.employee_code.ilike(like)))
     if department_id:
         q = q.filter(User.department_id == department_id)
+    if manager_id:
+        q = q.filter(User.manager_id == manager_id)
+    if unassigned:
+        q = q.filter(User.manager_id.is_(None))
     total = q.count()
     rows = q.order_by(User.full_name).offset((page - 1) * page_size).limit(page_size).all()
     return {"total": total, "page": page, "page_size": page_size,
@@ -56,6 +66,46 @@ def get_employee(employee_id: int, user: User = Depends(require_hr),
     if emp is None:
         raise HTTPException(status_code=404, detail="Employee not found")
     return user_full(emp, include_sensitive=True)
+
+
+@router.post("/employees/{employee_id}/set-manager")
+def set_manager(employee_id: int, body: SetManagerRequest, request: Request,
+                user: User = Depends(require_hr), db: Session = Depends(get_db)):
+    """Quick assign/remove a reporting manager — used from the employee
+    detail page, separately from the full edit form."""
+    emp = db.get(User, employee_id)
+    if emp is None:
+        raise HTTPException(status_code=404, detail="Employee not found")
+    if body.manager_id == employee_id:
+        raise HTTPException(status_code=400, detail="An employee cannot be their own manager")
+    if body.manager_id is not None:
+        mgr = db.get(User, body.manager_id)
+        if mgr is None or not mgr.is_active:
+            raise HTTPException(status_code=404, detail="Manager not found")
+    emp.manager_id = body.manager_id
+    audit(db, user.id, "set_manager", "hr",
+          f"{emp.full_name} (#{emp.id}) manager -> {body.manager_id or 'none'}",
+          client_info(request))
+    db.commit()
+    db.refresh(emp)
+    return {**user_brief(emp), "manager_name": emp.manager.full_name if emp.manager else None}
+
+
+@router.get("/employees/{employee_id}/requests")
+def employee_requests(employee_id: int, user: User = Depends(require_hr),
+                      db: Session = Depends(get_db)):
+    """Combined leave/WFH/regularization history for one employee, most
+    recent first — powers the employee detail page's requests panel."""
+    if db.get(User, employee_id) is None:
+        raise HTTPException(status_code=404, detail="Employee not found")
+    items = [leave_out(r) for r in db.query(LeaveRequest).filter(
+                LeaveRequest.user_id == employee_id).all()]
+    items += [wfh_out(r) for r in db.query(WFHRequest).filter(
+                WFHRequest.user_id == employee_id).all()]
+    items += [regularization_out(r) for r in db.query(RegularizationRequest).filter(
+                RegularizationRequest.user_id == employee_id).all()]
+    items.sort(key=lambda r: r["created_at"], reverse=True)
+    return items
 
 
 def _next_employee_code(db: Session) -> str:

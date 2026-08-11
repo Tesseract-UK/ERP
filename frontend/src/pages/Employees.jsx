@@ -1,5 +1,6 @@
 // HR employee management: list, add/edit, activate/deactivate, reset password.
 import { useCallback, useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { api } from '../api'
 import {
   ConfirmDialog, EmptyState, Field, Modal, Pagination, PasswordInput, Spinner, titleCase, useToast,
@@ -285,7 +286,7 @@ export default function Employees() {
                 <tbody>
                   {data.items.map((e) => (
                     <tr key={e.id}>
-                      <td><strong>{e.full_name}</strong><div className="help-text">{e.email}</div></td>
+                      <td><Link to={`/employees/${e.id}`}><strong>{e.full_name}</strong></Link><div className="help-text">{e.email}</div></td>
                       <td>{e.employee_code}</td>
                       <td>{e.department || '—'}</td>
                       <td>{titleCase(e.role)}</td>
