@@ -7,7 +7,9 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..deps import client_info, get_current_user
-from ..models import LEAVE_TYPES, LeavePolicy, LeaveRequest, User, WFHRequest
+from ..models import (
+    LEAVE_TYPES, EmployeeLeavePolicy, LeavePolicy, LeaveRequest, User, WFHRequest,
+)
 from ..schemas import LeaveCreateRequest
 from ..serializers import leave_out
 from ..utils import audit, notify, save_upload, working_days_between
@@ -16,9 +18,19 @@ router = APIRouter(prefix="/leaves", tags=["leaves"])
 
 
 def compute_balances(db: Session, user_id: int) -> dict:
-    """Balance = policy allocation - approved usage in the current year."""
-    year_start, year_end = date(date.today().year, 1, 1), date(date.today().year, 12, 31)
+    """Leave balance = annual allocation - approved usage this year, floored
+    at 0. Allocation is the employee's personal override if one is set,
+    otherwise the company-wide policy for that leave type.
+
+    WFH is accrued monthly rather than granted upfront: the annual figure
+    (default 24) is really "2/month" — so only monthly_rate × months elapsed
+    so far this year is available, and going over it shows as a real
+    negative balance (not floored) that next month's accrual reduces."""
+    today = date.today()
+    year_start, year_end = date(today.year, 1, 1), date(today.year, 12, 31)
     policies = {p.leave_type: p.annual_allocation for p in db.query(LeavePolicy).all()}
+    overrides = {o.leave_type: o.annual_allocation for o in db.query(EmployeeLeavePolicy)
+                 .filter(EmployeeLeavePolicy.user_id == user_id).all()}
 
     used = dict(db.query(LeaveRequest.leave_type, func.sum(LeaveRequest.days)).filter(
         LeaveRequest.user_id == user_id, LeaveRequest.status == "approved",
@@ -31,12 +43,18 @@ def compute_balances(db: Session, user_id: int) -> dict:
 
     balances = {}
     for lt in LEAVE_TYPES:
-        alloc = policies.get(lt, 0)
+        alloc = overrides.get(lt, policies.get(lt, 0))
         balances[lt] = {"allocated": alloc, "used": float(used.get(lt) or 0),
                         "remaining": max(alloc - float(used.get(lt) or 0), 0)}
-    wfh_alloc = policies.get("wfh", 0)
-    balances["wfh"] = {"allocated": wfh_alloc, "used": float(wfh_used),
-                       "remaining": max(wfh_alloc - wfh_used, 0)}
+
+    wfh_annual_cap = overrides.get("wfh", policies.get("wfh", 0))
+    wfh_monthly_rate = round(wfh_annual_cap / 12, 2)
+    wfh_accrued = round(wfh_monthly_rate * today.month, 2)  # this month's credit already counted
+    balances["wfh"] = {
+        "allocated": wfh_accrued, "used": float(wfh_used),
+        "remaining": round(wfh_accrued - wfh_used, 2),  # not floored — can go negative
+        "monthly_rate": wfh_monthly_rate, "annual_cap": wfh_annual_cap,
+    }
     return balances
 
 

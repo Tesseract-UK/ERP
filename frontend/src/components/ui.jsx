@@ -75,6 +75,25 @@ export function PasswordInput({ inputClassName = 'input', ...props }) {
   )
 }
 
+// Number input that behaves like a normal text field while typing — you can
+// backspace it fully empty instead of it snapping back to "0" on every
+// keystroke (the usual controlled-input papercut with type="number").
+// onChange receives a number, or null while the field is empty/invalid;
+// the caller decides what null means (default to 0, or "no value set").
+export function NumberInput({ value, onChange, min = 0, max, className = 'input', ...props }) {
+  const [raw, setRaw] = useState(value === null || value === undefined ? '' : String(value))
+  return (
+    <input {...props} className={className} type="number" min={min} max={max} value={raw}
+           onChange={(e) => {
+             const v = e.target.value
+             setRaw(v)
+             if (v === '' || v === '-') { onChange(null); return }
+             const n = Number(v)
+             if (!Number.isNaN(n)) onChange(n)
+           }} />
+  )
+}
+
 export function Field({ label, required, children, error, help }) {
   return (
     <div className="field">

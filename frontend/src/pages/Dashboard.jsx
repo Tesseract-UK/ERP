@@ -8,11 +8,11 @@ import {
 } from '../components/ui'
 import { AlertTriangle, ArrowRight, Cake, CalendarDays, Megaphone } from '../components/icons'
 
-function Stat({ label, value, sub }) {
+function Stat({ label, value, sub, danger }) {
   return (
     <div className="card stat">
       <div className="label">{label}</div>
-      <div className="value">{value}</div>
+      <div className="value" style={danger ? { color: 'var(--danger)' } : undefined}>{value}</div>
       {sub && <div className="sub">{sub}</div>}
     </div>
   )
@@ -111,7 +111,8 @@ export default function Dashboard() {
       <div className="grid cols-4">
         <Stat label="Leave Balance" value={leaveRemaining}
               sub={`Casual ${bal.casual.remaining} · Sick ${bal.sick.remaining} · Earned ${bal.earned.remaining}`} />
-        <Stat label="WFH Balance" value={bal.wfh.remaining} sub={`of ${bal.wfh.allocated} this year`} />
+        <Stat label="WFH Balance" value={bal.wfh.remaining} danger={bal.wfh.remaining < 0}
+              sub={`of ${bal.wfh.allocated} accrued · ${bal.wfh.monthly_rate}/month`} />
         <Stat label="My Pending Requests" value={data.pending_requests.total}
               sub={`Leave ${data.pending_requests.leave} · WFH ${data.pending_requests.wfh} · Reg. ${data.pending_requests.regularization}`} />
         <Stat label="Hours Today" value={fmtHours(att?.work_hours ?? 0)}

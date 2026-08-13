@@ -133,11 +133,24 @@ class AttendanceBreak(Base):
 
 
 class LeavePolicy(Base):
-    """Annual allocation per leave type; wfh row holds the WFH allowance."""
+    """Company-wide annual allocation per leave type; wfh row holds the WFH
+    allowance. Applies to every employee unless overridden below."""
     __tablename__ = "leave_policies"
     id: Mapped[int] = mapped_column(primary_key=True)
     leave_type: Mapped[str] = mapped_column(String(30), unique=True)  # LEAVE_TYPES or "wfh"
     annual_allocation: Mapped[float] = mapped_column(Float, default=0)
+
+
+class EmployeeLeavePolicy(Base):
+    """Per-employee override of the annual allocation for one leave type
+    (or "wfh"). Absent = that employee just uses the company-wide policy."""
+    __tablename__ = "employee_leave_policies"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    leave_type: Mapped[str] = mapped_column(String(30))  # LEAVE_TYPES or "wfh"
+    annual_allocation: Mapped[float] = mapped_column(Float, default=0)
+
+    __table_args__ = (UniqueConstraint("user_id", "leave_type", name="uq_employee_leave_policy"),)
 
 
 class LeaveRequest(Base):

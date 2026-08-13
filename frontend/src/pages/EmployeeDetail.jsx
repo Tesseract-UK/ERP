@@ -7,11 +7,84 @@ import { Link, useParams } from 'react-router-dom'
 import { api } from '../api'
 import MonthCalendar, { MonthNav } from '../components/MonthCalendar'
 import {
-  EmptyState, Field, Modal, Spinner, StatusBadge, fmtDate, titleCase, useToast,
+  EmptyState, Field, Modal, NumberInput, Spinner, StatusBadge, fmtDate, titleCase, useToast,
 } from '../components/ui'
 import { CalendarDays, Users } from '../components/icons'
 
 const KIND_LABEL = { leave: 'Leave', wfh: 'Work From Home', regularization: 'Regularization' }
+const ALLOCATION_TYPES = ['casual', 'sick', 'earned', 'maternity', 'paternity', 'optional_holiday', 'wfh']
+
+function AllocationsCard({ employeeId }) {
+  const toast = useToast()
+  const [overrides, setOverrides] = useState(null)
+  const [balance, setBalance] = useState(null)
+  const [busy, setBusy] = useState(false)
+
+  const load = useCallback(() => {
+    api.get(`/hr/employees/${employeeId}/leave-overrides`).then(setOverrides).catch((e) => toast(e.message, 'error'))
+    api.get(`/hr/employees/${employeeId}/balance`).then(setBalance).catch(() => {})
+  }, [employeeId, toast])
+  useEffect(load, [load])
+
+  const setOverride = (lt, value) => {
+    setOverrides((o) => ({ ...o, [lt]: { ...o[lt], override: value } }))
+  }
+
+  const save = async () => {
+    setBusy(true)
+    try {
+      const allocations = Object.fromEntries(
+        Object.entries(overrides).map(([lt, v]) => [lt, v.override]))
+      await api.put(`/hr/employees/${employeeId}/leave-overrides`, { allocations })
+      toast('Allocations updated', 'success')
+      load()
+    } catch (err) {
+      toast(err.message, 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (!overrides) return <Spinner />
+
+  return (
+    <div className="card">
+      <div className="card-head"><h3>Leave &amp; WFH Allocations</h3>
+        <button className="btn secondary sm" onClick={save} disabled={busy}>
+          {busy ? 'Saving…' : 'Save'}</button>
+      </div>
+      <div className="card-body">
+        {ALLOCATION_TYPES.map((lt) => {
+          const wfhBal = lt === 'wfh' && balance?.wfh
+          return (
+            <div key={lt} style={{ padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span>{lt === 'wfh' ? 'Work From Home (annual cap)' : `${titleCase(lt)} Leave`}</span>
+                <NumberInput style={{ width: 110 }} min={0} max={365}
+                             value={overrides[lt].override}
+                             onChange={(n) => setOverride(lt, n)}
+                             placeholder={`Default: ${overrides[lt].company_default}`} />
+              </div>
+              {wfhBal && (
+                <div className="help-text" style={{ marginTop: 4 }}>
+                  Live balance: accrued {wfhBal.allocated} ({wfhBal.monthly_rate}/month so far) −
+                  used {wfhBal.used} = remaining{' '}
+                  <strong style={{ color: wfhBal.remaining < 0 ? 'var(--danger)' : 'var(--ink)' }}>
+                    {wfhBal.remaining}
+                  </strong>
+                </div>
+              )}
+            </div>
+          )
+        })}
+        <p className="help-text" style={{ marginTop: 10 }}>
+          Leave a field blank to use the company default. A number overrides it for this
+          employee only. WFH accrues monthly and can go negative if overused.
+        </p>
+      </div>
+    </div>
+  )
+}
 
 function DecisionModal({ item, decision, onClose, onDone }) {
   const toast = useToast()
@@ -218,6 +291,8 @@ export default function EmployeeDetail() {
           </div>
         )}
       </div>
+
+      <AllocationsCard employeeId={Number(id)} />
 
       <div className="card">
         <div className="card-head">

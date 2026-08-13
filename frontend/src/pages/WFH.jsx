@@ -46,8 +46,13 @@ export default function WFH() {
         <div className="grid cols-4">
           <div className="card stat">
             <div className="label">WFH Remaining</div>
-            <div className="value">{balance.remaining}</div>
-            <div className="sub">used {balance.used} of {balance.allocated} this year</div>
+            <div className="value" style={{ color: balance.remaining < 0 ? 'var(--danger)' : undefined }}>
+              {balance.remaining}
+            </div>
+            <div className="sub">
+              used {balance.used} of {balance.allocated} accrued so far
+              {balance.monthly_rate != null && ` · ${balance.monthly_rate}/month, ${balance.annual_cap}/year cap`}
+            </div>
           </div>
         </div>
       )}

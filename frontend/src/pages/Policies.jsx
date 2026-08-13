@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '../api'
 import {
-  ConfirmDialog, EmptyState, Field, Modal, Spinner, fmtDate, titleCase, useToast,
+  ConfirmDialog, EmptyState, Field, Modal, NumberInput, Spinner, fmtDate, titleCase, useToast,
 } from '../components/ui'
 import { CalendarDays } from '../components/icons'
 
@@ -103,15 +103,15 @@ export default function Policies() {
         <div className="card-body">
           {policies === null ? <Spinner /> : POLICY_KEYS.map((k) => (
             <div key={k} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 0', borderBottom: '1px solid var(--border)' }}>
-              <span>{k === 'wfh' ? 'Work From Home (days/year)' : `${titleCase(k)} Leave`}</span>
-              <input className="input" type="number" min="0" max="365" style={{ width: 90 }}
-                     value={policies[k] ?? 0}
-                     onChange={(e) => setPolicies({ ...policies, [k]: Number(e.target.value) })} />
+              <span>{k === 'wfh' ? 'Work From Home (annual cap)' : `${titleCase(k)} Leave`}</span>
+              <NumberInput style={{ width: 90 }} min={0} max={365} value={policies[k] ?? 0}
+                           onChange={(n) => setPolicies({ ...policies, [k]: n ?? 0 })} />
             </div>
           ))}
           <p className="help-text" style={{ marginTop: 10 }}>
             Balances are computed against these allocations for the current calendar year.
-            Unpaid leave is always unlimited.
+            Unpaid leave is always unlimited. WFH accrues monthly (this annual number ÷ 12
+            per month) rather than being granted all at once, and can go negative if overused.
           </p>
         </div>
       </div>

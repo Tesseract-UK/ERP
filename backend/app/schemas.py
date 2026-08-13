@@ -147,6 +147,12 @@ class PolicyUpdateRequest(BaseModel):
     allocations: dict[str, float]  # leave_type -> annual allocation
 
 
+class EmployeeLeaveOverrideRequest(BaseModel):
+    # leave_type -> allocation, or null to remove the override (revert to
+    # the company-wide policy for that type).
+    allocations: dict[str, float | None]
+
+
 class AnnouncementRequest(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     body: str = Field(min_length=1, max_length=5000)

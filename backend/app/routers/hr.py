@@ -11,18 +11,19 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..deps import client_info, require_admin, require_hr
 from ..models import (
-    Attendance, EmployeeDocument, Holiday, LeavePolicy, LeaveRequest,
-    RegularizationRequest, User, WFHRequest,
+    Attendance, EmployeeDocument, EmployeeLeavePolicy, Holiday, LEAVE_TYPES,
+    LeavePolicy, LeaveRequest, RegularizationRequest, User, WFHRequest,
 )
 from ..schemas import (
-    EmployeeUpsertRequest, HolidayRequest, PolicyUpdateRequest,
-    ResetPasswordRequest, SetManagerRequest,
+    EmployeeLeaveOverrideRequest, EmployeeUpsertRequest, HolidayRequest,
+    PolicyUpdateRequest, ResetPasswordRequest, SetManagerRequest,
 )
 from ..security import hash_password
 from ..serializers import (
     holiday_out, leave_out, regularization_out, user_brief, user_full, wfh_out,
 )
 from ..utils import audit, check_email_domain, notify, save_upload
+from .leaves import compute_balances
 
 router = APIRouter(prefix="/hr", tags=["hr"])
 
@@ -238,6 +239,66 @@ def reset_password(employee_id: int, body: ResetPasswordRequest, request: Reques
           client_info(request))
     db.commit()
     return {"message": "Password has been reset"}
+
+
+# ---------- per-employee leave/WFH allocation overrides ----------
+
+def _leave_override_payload(db: Session, employee_id: int) -> dict:
+    company = {p.leave_type: p.annual_allocation for p in db.query(LeavePolicy).all()}
+    overrides = {o.leave_type: o.annual_allocation for o in db.query(EmployeeLeavePolicy)
+                 .filter(EmployeeLeavePolicy.user_id == employee_id).all()}
+    types = list(LEAVE_TYPES) + ["wfh"]
+    return {lt: {"company_default": company.get(lt, 0), "override": overrides.get(lt)} for lt in types}
+
+
+@router.get("/employees/{employee_id}/leave-overrides")
+def get_leave_overrides(employee_id: int, user: User = Depends(require_hr),
+                        db: Session = Depends(get_db)):
+    if db.get(User, employee_id) is None:
+        raise HTTPException(status_code=404, detail="Employee not found")
+    return _leave_override_payload(db, employee_id)
+
+
+@router.get("/employees/{employee_id}/balance")
+def get_employee_balance(employee_id: int, user: User = Depends(require_hr),
+                         db: Session = Depends(get_db)):
+    """The employee's live computed leave/WFH balance — same numbers they
+    see themselves, viewable by HR/Admin from the employee detail page."""
+    if db.get(User, employee_id) is None:
+        raise HTTPException(status_code=404, detail="Employee not found")
+    return compute_balances(db, employee_id)
+
+
+@router.put("/employees/{employee_id}/leave-overrides")
+def set_leave_overrides(employee_id: int, body: EmployeeLeaveOverrideRequest, request: Request,
+                        user: User = Depends(require_hr), db: Session = Depends(get_db)):
+    """Set (or clear, with a null value) this employee's personal leave/WFH
+    allocation — otherwise they use the company-wide policy."""
+    emp = db.get(User, employee_id)
+    if emp is None:
+        raise HTTPException(status_code=404, detail="Employee not found")
+    valid_types = set(LEAVE_TYPES) | {"wfh"}
+    for leave_type, value in body.allocations.items():
+        if leave_type not in valid_types:
+            raise HTTPException(status_code=400, detail=f"Unknown leave type: {leave_type}")
+        existing = db.query(EmployeeLeavePolicy).filter(
+            EmployeeLeavePolicy.user_id == employee_id,
+            EmployeeLeavePolicy.leave_type == leave_type).first()
+        if value is None:
+            if existing:
+                db.delete(existing)
+        else:
+            if value < 0 or value > 365:
+                raise HTTPException(status_code=400, detail="Allocation must be between 0 and 365")
+            if existing:
+                existing.annual_allocation = value
+            else:
+                db.add(EmployeeLeavePolicy(user_id=employee_id, leave_type=leave_type,
+                                           annual_allocation=value))
+    audit(db, user.id, "set_leave_overrides", "hr", f"For {emp.full_name} (#{emp.id})",
+          client_info(request))
+    db.commit()
+    return _leave_override_payload(db, employee_id)
 
 
 # ---------- employee documents ----------
