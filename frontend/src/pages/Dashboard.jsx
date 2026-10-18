@@ -18,7 +18,29 @@ function Stat({ label, value, sub, danger }) {
   )
 }
 
-function CheckInPanel({ att, onRefresh }) {
+function getLiveWorkHours(att, nowMs) {
+  if (!att?.check_in || att?.check_out) return att?.work_hours ?? 0
+
+  const checkInMs = Date.parse(att.check_in)
+  if (Number.isNaN(checkInMs)) return att?.work_hours ?? 0
+
+  const endMs = Math.max(nowMs, checkInMs)
+  let workedMs = endMs - checkInMs
+
+  for (const br of att.breaks || []) {
+    const startMs = Date.parse(br.start)
+    if (Number.isNaN(startMs)) continue
+
+    const breakEndMs = br.end ? Date.parse(br.end) : endMs
+    if (Number.isNaN(breakEndMs)) continue
+
+    workedMs -= Math.max(0, Math.min(breakEndMs, endMs) - startMs)
+  }
+
+  return Math.max(workedMs / 3600000, 0)
+}
+
+function CheckInPanel({ att, onRefresh, workedHours }) {
   const toast = useToast()
   const [busy, setBusy] = useState(false)
 
@@ -58,7 +80,7 @@ function CheckInPanel({ att, onRefresh }) {
         </div>
         <div style={{ color: 'var(--ink-2)', fontSize: 13, marginTop: 3 }}>
           In: <strong>{fmtTime(att?.check_in)}</strong> · Out: <strong>{fmtTime(att?.check_out)}</strong>
-          {' '}· Worked: <strong>{fmtHours(att?.work_hours)}</strong>
+          {' '}· Worked: <strong>{fmtHours(workedHours)}</strong>
           {' '}· Breaks: <strong>{Math.round(att?.break_minutes || 0)}m</strong>
           {att?.overtime_hours > 0 && <> · Overtime: <strong>{fmtHours(att.overtime_hours)}</strong></>}
         </div>
@@ -82,16 +104,26 @@ export default function Dashboard() {
   const { user } = useAuth()
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
+  const [nowMs, setNowMs] = useState(Date.now())
 
   const load = useCallback(() => {
     api.get('/dashboard').then(setData).catch((e) => setError(e.message))
   }, [])
   useEffect(load, [load])
 
+  useEffect(() => {
+    const hasActiveAttendance = data?.today_attendance?.check_in && !data?.today_attendance?.check_out
+    if (!hasActiveAttendance) return undefined
+
+    const timer = setInterval(() => setNowMs(Date.now()), 1000)
+    return () => clearInterval(timer)
+  }, [data?.today_attendance?.check_in, data?.today_attendance?.check_out])
+
   if (error) return <EmptyState icon={AlertTriangle} title="Could not load dashboard" hint={error} />
   if (!data) return <Spinner />
 
   const att = data.today_attendance
+  const workedHours = getLiveWorkHours(att, nowMs)
   const bal = data.balances
   const leaveRemaining = ['casual', 'sick', 'earned'].reduce((s, k) => s + (bal[k]?.remaining || 0), 0)
   const org = data.organization || data.team
@@ -106,7 +138,7 @@ export default function Dashboard() {
         {att && <StatusBadge status={att.status} />}
       </div>
 
-      <CheckInPanel att={att} onRefresh={load} />
+      <CheckInPanel att={att} onRefresh={load} workedHours={workedHours} />
 
       <div className="grid cols-4">
         <Stat label="Leave Balance" value={leaveRemaining}
@@ -115,7 +147,7 @@ export default function Dashboard() {
               sub={`of ${bal.wfh.allocated} accrued · ${bal.wfh.monthly_rate}/month`} />
         <Stat label="My Pending Requests" value={data.pending_requests.total}
               sub={`Leave ${data.pending_requests.leave} · WFH ${data.pending_requests.wfh} · Reg. ${data.pending_requests.regularization}`} />
-        <Stat label="Hours Today" value={fmtHours(att?.work_hours ?? 0)}
+        <Stat label="Hours Today" value={fmtHours(workedHours)}
               sub={att?.overtime_hours > 0 ? `+${fmtHours(att.overtime_hours)} overtime` : 'Standard day: 8h'} />
       </div>
 

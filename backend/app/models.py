@@ -1,3 +1,4 @@
+
 """Database models for the HRMS.
 
 Leave and WFH balances are computed (policy allocation minus approved usage)
@@ -55,14 +56,22 @@ class Shift(Base):
 
 class User(Base):
     __tablename__ = "users"
+
     id: Mapped[int] = mapped_column(primary_key=True)
     employee_code: Mapped[str] = mapped_column(String(20), unique=True)
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(255))
-    # Set once a user signs in via Clerk (email/password or Google); links
-    # the Clerk identity to this row. Null for accounts that have never
-    # signed in through Clerk.
-    clerk_user_id: Mapped[str | None] = mapped_column(String(64), unique=True, index=True)
+
+    # Legacy Clerk identity; retained temporarily during migration.
+    clerk_user_id: Mapped[str | None] = mapped_column(
+        String(64), unique=True, index=True
+    )
+
+    # Stable Google identity used by Google OAuth.
+    google_sub: Mapped[str | None] = mapped_column(
+        String(255), unique=True, index=True
+    )
+
     full_name: Mapped[str] = mapped_column(String(150))
     role: Mapped[str] = mapped_column(String(20), default="employee")
     phone: Mapped[str | None] = mapped_column(String(20))
@@ -73,17 +82,21 @@ class User(Base):
     manager_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
     joining_date: Mapped[date | None] = mapped_column(Date)
     date_of_birth: Mapped[date | None] = mapped_column(Date)
+
     # Sensitive fields — editable by HR/Admin only.
     pan_number: Mapped[str | None] = mapped_column(String(20))
     aadhaar_number: Mapped[str | None] = mapped_column(String(20))
     passport_number: Mapped[str | None] = mapped_column(String(30))
     bank_account: Mapped[str | None] = mapped_column(String(30))
     ifsc_code: Mapped[str | None] = mapped_column(String(15))
+
     # Employee-editable fields.
     emergency_contact_name: Mapped[str | None] = mapped_column(String(150))
     emergency_contact_phone: Mapped[str | None] = mapped_column(String(20))
     address: Mapped[str | None] = mapped_column(Text)
+
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
     # First-login onboarding: force a password change, then a one-time
     # personal-details submission before the app unlocks.
     must_change_password: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -97,7 +110,10 @@ class User(Base):
 
 class Attendance(Base):
     __tablename__ = "attendance"
-    __table_args__ = (UniqueConstraint("user_id", "date", name="uq_attendance_user_date"),)
+    __table_args__ = (
+        UniqueConstraint("user_id", "date", name="uq_attendance_user_date"),
+    )
+
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     date: Mapped[date] = mapped_column(Date, index=True)
@@ -109,6 +125,7 @@ class Attendance(Base):
     overtime_hours: Mapped[float] = mapped_column(Float, default=0)
     is_late: Mapped[bool] = mapped_column(Boolean, default=False)
     notes: Mapped[str | None] = mapped_column(Text)
+
     # Device/location capture at check-in for fraud reduction.
     latitude: Mapped[float | None] = mapped_column(Float)
     longitude: Mapped[float | None] = mapped_column(Float)
@@ -118,12 +135,17 @@ class Attendance(Base):
     device: Mapped[str | None] = mapped_column(String(100))
 
     user = relationship("User", lazy="joined")
-    breaks = relationship("AttendanceBreak", back_populates="attendance",
-                          cascade="all, delete-orphan", order_by="AttendanceBreak.start_time")
+    breaks = relationship(
+        "AttendanceBreak",
+        back_populates="attendance",
+        cascade="all, delete-orphan",
+        order_by="AttendanceBreak.start_time",
+    )
 
 
 class AttendanceBreak(Base):
     __tablename__ = "attendance_breaks"
+
     id: Mapped[int] = mapped_column(primary_key=True)
     attendance_id: Mapped[int] = mapped_column(ForeignKey("attendance.id"), index=True)
     start_time: Mapped[datetime] = mapped_column(DateTime)
@@ -136,8 +158,9 @@ class LeavePolicy(Base):
     """Company-wide annual allocation per leave type; wfh row holds the WFH
     allowance. Applies to every employee unless overridden below."""
     __tablename__ = "leave_policies"
+
     id: Mapped[int] = mapped_column(primary_key=True)
-    leave_type: Mapped[str] = mapped_column(String(30), unique=True)  # LEAVE_TYPES or "wfh"
+    leave_type: Mapped[str] = mapped_column(String(30), unique=True)
     annual_allocation: Mapped[float] = mapped_column(Float, default=0)
 
 
@@ -145,16 +168,20 @@ class EmployeeLeavePolicy(Base):
     """Per-employee override of the annual allocation for one leave type
     (or "wfh"). Absent = that employee just uses the company-wide policy."""
     __tablename__ = "employee_leave_policies"
+
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
-    leave_type: Mapped[str] = mapped_column(String(30))  # LEAVE_TYPES or "wfh"
+    leave_type: Mapped[str] = mapped_column(String(30))
     annual_allocation: Mapped[float] = mapped_column(Float, default=0)
 
-    __table_args__ = (UniqueConstraint("user_id", "leave_type", name="uq_employee_leave_policy"),)
+    __table_args__ = (
+        UniqueConstraint("user_id", "leave_type", name="uq_employee_leave_policy"),
+    )
 
 
 class LeaveRequest(Base):
     __tablename__ = "leave_requests"
+
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     leave_type: Mapped[str] = mapped_column(String(30))
@@ -175,6 +202,7 @@ class LeaveRequest(Base):
 
 class WFHRequest(Base):
     __tablename__ = "wfh_requests"
+
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     date: Mapped[date] = mapped_column(Date)
@@ -192,6 +220,7 @@ class WFHRequest(Base):
 
 class RegularizationRequest(Base):
     __tablename__ = "regularization_requests"
+
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     date: Mapped[date] = mapped_column(Date)
@@ -210,6 +239,7 @@ class RegularizationRequest(Base):
 
 class Holiday(Base):
     __tablename__ = "holidays"
+
     id: Mapped[int] = mapped_column(primary_key=True)
     date: Mapped[date] = mapped_column(Date, index=True)
     name: Mapped[str] = mapped_column(String(150))
@@ -218,6 +248,7 @@ class Holiday(Base):
 
 class Announcement(Base):
     __tablename__ = "announcements"
+
     id: Mapped[int] = mapped_column(primary_key=True)
     title: Mapped[str] = mapped_column(String(200))
     body: Mapped[str] = mapped_column(Text)
@@ -229,6 +260,7 @@ class Announcement(Base):
 
 class Notification(Base):
     __tablename__ = "notifications"
+
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     title: Mapped[str] = mapped_column(String(200))
@@ -240,6 +272,7 @@ class Notification(Base):
 
 class EmployeeDocument(Base):
     __tablename__ = "employee_documents"
+
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     name: Mapped[str] = mapped_column(String(150))
@@ -250,6 +283,7 @@ class EmployeeDocument(Base):
 
 class AuditLog(Base):
     __tablename__ = "audit_logs"
+
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
     action: Mapped[str] = mapped_column(String(100))
@@ -264,6 +298,7 @@ class AuditLog(Base):
 
 class CompanySetting(Base):
     __tablename__ = "company_settings"
+
     id: Mapped[int] = mapped_column(primary_key=True)
     key: Mapped[str] = mapped_column(String(80), unique=True)
     value: Mapped[str] = mapped_column(Text)
