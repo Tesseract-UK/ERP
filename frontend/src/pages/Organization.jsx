@@ -1,17 +1,17 @@
 // Admin: departments, designations, locations, shifts and company settings.
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '../api'
-import { Field, Spinner, useToast } from '../components/ui'
+import { ConfirmDialog, Field, Spinner, useToast } from '../components/ui'
 
 function ItemList({ title, items, nameKey, extra, onAdd, onToggle, addFields }) {
   const [form, setForm] = useState({})
   const [busy, setBusy] = useState(false)
+  const [pendingToggle, setPendingToggle] = useState(null)
   const submit = async (e) => {
     e.preventDefault()
     setBusy(true)
     try {
-      await onAdd(form)
-      setForm({})
+      if (await onAdd(form)) setForm({})
     } finally {
       setBusy(false)
     }
@@ -34,12 +34,27 @@ function ItemList({ title, items, nameKey, extra, onAdd, onToggle, addFields }) 
             <span style={{ opacity: i.is_active ? 1 : 0.45 }}>
               {i[nameKey]}{extra ? <span className="help-text" style={{ display: 'inline', marginLeft: 8 }}>{extra(i)}</span> : null}
             </span>
-            <button className="btn ghost sm" onClick={() => onToggle(i)}>
+            <button className="btn ghost sm" onClick={() => setPendingToggle(i)}>
               {i.is_active ? 'Disable' : 'Enable'}
             </button>
           </div>
         ))}
       </div>
+      {pendingToggle && <ConfirmDialog
+        danger={pendingToggle.is_active}
+        title={`${pendingToggle.is_active ? 'Disable' : 'Enable'} ${pendingToggle[nameKey]}`}
+        message={pendingToggle.is_active
+          ? 'This value will no longer be available for new employee assignments. Existing employee records and history will remain.'
+          : 'This value will be available for new employee assignments again.'}
+        confirmLabel={pendingToggle.is_active ? 'Disable' : 'Enable'}
+        busy={busy}
+        onClose={() => setPendingToggle(null)}
+        onConfirm={async () => {
+          setBusy(true)
+          try { await onToggle(pendingToggle); setPendingToggle(null) }
+          finally { setBusy(false) }
+        }}
+      />}
     </div>
   )
 }
@@ -63,8 +78,10 @@ export default function Organization() {
       await api.post(path, transform(form))
       toast('Added', 'success')
       load()
+      return true
     } catch (err) {
       toast(err.message, 'error')
+      return false
     }
   }
   const toggle = (kind) => async (item) => {
@@ -90,10 +107,10 @@ export default function Organization() {
   }
 
   const settingDefs = [
-    ['company_name', 'Company name'],
-    ['office_start', 'Office start time (HH:MM)'],
-    ['office_end', 'Office end time (HH:MM)'],
-    ['late_after', 'Mark late after (HH:MM)'],
+    ['office_latitude', 'Office latitude', -90, 90],
+    ['office_longitude', 'Office longitude', -180, 180],
+    ['office_radius_meters', 'Office check-in radius (metres)', 50, 5000],
+    ['max_gps_accuracy_meters', 'Maximum GPS uncertainty (metres)', 10, 500],
   ]
 
   return (
@@ -119,12 +136,13 @@ export default function Organization() {
         <div className="card">
           <div className="card-head"><h3>Company Settings</h3></div>
           <form className="card-body" onSubmit={saveSettings}>
-            {settingDefs.map(([key, label]) => (
+            {settingDefs.map(([key, label, min, max]) => (
               <Field key={key} label={label}>
-                <input className="input" value={settings[key] || ''}
+                <input className="input" type="number" min={min} max={max} step="any" required value={settings[key] ?? ''}
                        onChange={(e) => setSettings({ ...settings, [key]: e.target.value })} />
               </Field>
             ))}
+            <p className="help-text">Attendance accepts a location only when its reported accuracy is within this limit. The office point and radius are checked again by the backend.</p>
             <button className="btn" disabled={busy}>{busy ? 'Saving…' : 'Save Settings'}</button>
           </form>
         </div>

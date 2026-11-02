@@ -2,10 +2,10 @@
 // detail, or to quick-apply for Leave/WFH on that date. Below the calendar,
 // track every Leave/WFH request raised for the month shown, with live status.
 import { useCallback, useEffect, useState } from 'react'
-import { api } from '../api'
+import { api, API_BASE } from '../api'
 import MonthCalendar, { MonthNav } from '../components/MonthCalendar'
 import { LeaveApplyForm, WfhApplyForm } from '../components/RequestForms'
-import { EmptyState, Modal, Spinner, StatusBadge, fmtDate, titleCase, useToast } from '../components/ui'
+import { EmptyState, Modal, Spinner, StatusBadge, fmtDate, fmtDateTime, titleCase, useToast } from '../components/ui'
 import { CalendarDays } from '../components/icons'
 
 export default function Attendance() {
@@ -15,6 +15,7 @@ export default function Attendance() {
   const [leaveRows, setLeaveRows] = useState(null)
   const [wfhRows, setWfhRows] = useState(null)
   const [applyType, setApplyType] = useState(null) // 'leave' | 'wfh' | null
+  const [selectedRequest, setSelectedRequest] = useState(null)
   const toast = useToast()
 
   useEffect(() => {
@@ -76,7 +77,7 @@ export default function Attendance() {
                         hint="Leave and WFH requests you raise for this month will appear here." />
           : (
             <div className="table-wrap"><table className="table">
-              <thead><tr><th>Type</th><th>Dates</th><th>Reason</th><th>Status</th><th>Reviewed By</th></tr></thead>
+              <thead><tr><th>Type</th><th>Dates</th><th>Reason</th><th>Status</th><th>Reviewed By</th><th>Details</th></tr></thead>
               <tbody>
                 {monthRequests.map((r) => (
                   <tr key={`${r.kind}-${r.id}`}>
@@ -87,6 +88,7 @@ export default function Attendance() {
                     <td><StatusBadge status={r.status} />
                       {r.approver_comment && <div className="help-text" title={r.approver_comment}>“{r.approver_comment}”</div>}</td>
                     <td>{r.approver_name || '—'}</td>
+                    <td><button className="btn ghost sm" onClick={() => setSelectedRequest(r)}>View</button></td>
                   </tr>
                 ))}
               </tbody>
@@ -106,6 +108,17 @@ export default function Attendance() {
                         onDone={() => { setApplyType(null); loadRequests() }} />
         </Modal>
       )}
+      {selectedRequest && <Modal title="Request details" onClose={() => setSelectedRequest(null)}>
+        <p><strong>Type:</strong> {selectedRequest.kind === 'leave' ? `${titleCase(selectedRequest.leave_type)} Leave` : 'Work From Home'}</p>
+        <p><strong>Dates:</strong> {selectedRequest.start_date === selectedRequest.end_date
+          ? fmtDate(selectedRequest.start_date) : `${fmtDate(selectedRequest.start_date)} → ${fmtDate(selectedRequest.end_date)}`}</p>
+        {selectedRequest.days != null && <p><strong>Working days:</strong> {selectedRequest.days}</p>}
+        <p><strong>Reason:</strong> {selectedRequest.reason}</p>
+        <p><strong>Status:</strong> {titleCase(selectedRequest.status)} · <strong>Submitted:</strong> {fmtDateTime(selectedRequest.created_at)}</p>
+        {selectedRequest.approver_name && <p><strong>Reviewed by:</strong> {selectedRequest.approver_name}</p>}
+        {selectedRequest.approver_comment && <p><strong>Decision note:</strong> {selectedRequest.approver_comment}</p>}
+        {selectedRequest.document_path && <p style={{ marginTop: 12 }}><a href={`${API_BASE}/files/${selectedRequest.document_path.split(/[\\/]/).map(encodeURIComponent).join('/')}`} target="_blank" rel="noreferrer">Open supporting document</a></p>}
+      </Modal>}
     </div>
   )
 }

@@ -1,5 +1,7 @@
 """Shared FastAPI dependencies: authentication and role-based authorization."""
 
+from datetime import datetime
+
 from fastapi import (
     Cookie,
     Depends,
@@ -10,7 +12,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 
 from .database import get_db
-from .models import User
+from .models import AuthSession, User
 from .security import decode_token
 
 
@@ -33,6 +35,19 @@ def _get_user_from_token(token: str, db: Session) -> User | None:
     try:
         user_id = int(subject)
     except (TypeError, ValueError):
+        return None
+
+    session_id = payload.get("sid")
+    if not isinstance(session_id, str):
+        return None
+
+    session = db.get(AuthSession, session_id)
+    if (
+        session is None
+        or session.user_id != user_id
+        or session.revoked_at is not None
+        or session.expires_at <= datetime.utcnow()
+    ):
         return None
 
     user = db.get(User, user_id)

@@ -108,6 +108,29 @@ class User(Base):
     manager = relationship("User", remote_side=[id], lazy="joined", join_depth=1)
 
 
+class AuthSession(Base):
+    """Server-tracked login session, allowing immediate revocation."""
+    __tablename__ = "auth_sessions"
+
+    session_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime, index=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class AuthRefreshToken(Base):
+    """Hash-only, single-use refresh credentials for rotating sessions."""
+    __tablename__ = "auth_refresh_tokens"
+
+    token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    session_id: Mapped[str] = mapped_column(
+        ForeignKey("auth_sessions.session_id", ondelete="CASCADE"), index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+
 class Attendance(Base):
     __tablename__ = "attendance"
     __table_args__ = (
@@ -125,16 +148,29 @@ class Attendance(Base):
     overtime_hours: Mapped[float] = mapped_column(Float, default=0)
     is_late: Mapped[bool] = mapped_column(Boolean, default=False)
     notes: Mapped[str | None] = mapped_column(Text)
+    # Admin corrections are stored separately from punch data so later work-hour
+    # recomputation cannot silently undo the reviewed attendance status.
+    status_override: Mapped[str | None] = mapped_column(String(20))
+    status_override_reason: Mapped[str | None] = mapped_column(Text)
+    status_override_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    status_override_at: Mapped[datetime | None] = mapped_column(DateTime)
 
     # Device/location capture at check-in for fraud reduction.
     latitude: Mapped[float | None] = mapped_column(Float)
     longitude: Mapped[float | None] = mapped_column(Float)
+    location_accuracy_meters: Mapped[float | None] = mapped_column(Float)
+    distance_from_office_meters: Mapped[float | None] = mapped_column(Float)
+    checkout_latitude: Mapped[float | None] = mapped_column(Float)
+    checkout_longitude: Mapped[float | None] = mapped_column(Float)
+    checkout_accuracy_meters: Mapped[float | None] = mapped_column(Float)
+    checkout_distance_from_office_meters: Mapped[float | None] = mapped_column(Float)
     ip_address: Mapped[str | None] = mapped_column(String(45))
     browser: Mapped[str | None] = mapped_column(String(100))
     os: Mapped[str | None] = mapped_column(String(100))
     device: Mapped[str | None] = mapped_column(String(100))
 
-    user = relationship("User", lazy="joined")
+    user = relationship("User", foreign_keys=[user_id], lazy="joined")
+    status_override_by = relationship("User", foreign_keys=[status_override_by_id], lazy="joined")
     breaks = relationship(
         "AttendanceBreak",
         back_populates="attendance",
@@ -189,15 +225,23 @@ class LeaveRequest(Base):
     end_date: Mapped[date] = mapped_column(Date)
     days: Mapped[float] = mapped_column(Float)
     reason: Mapped[str] = mapped_column(Text)
+    mentions_json: Mapped[str] = mapped_column(Text, default="[]")
     document_path: Mapped[str | None] = mapped_column(String(255))
     status: Mapped[str] = mapped_column(String(20), default="pending", index=True)
     approver_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
     approver_comment: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     decided_at: Mapped[datetime | None] = mapped_column(DateTime)
+    approval_stage: Mapped[str] = mapped_column(String(20), default="pending_manager", index=True)
+    manager_decided_at: Mapped[datetime | None] = mapped_column(DateTime)
+    manager_decided_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    manager_comment: Mapped[str | None] = mapped_column(Text)
+    hr_decided_at: Mapped[datetime | None] = mapped_column(DateTime)
+    hr_comment: Mapped[str | None] = mapped_column(Text)
 
     user = relationship("User", foreign_keys=[user_id], lazy="joined")
     approver = relationship("User", foreign_keys=[approver_id], lazy="joined")
+    manager_decided_by = relationship("User", foreign_keys=[manager_decided_by_id], lazy="joined")
 
 
 class WFHRequest(Base):
@@ -207,15 +251,23 @@ class WFHRequest(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     date: Mapped[date] = mapped_column(Date)
     reason: Mapped[str] = mapped_column(Text)
+    mentions_json: Mapped[str] = mapped_column(Text, default="[]")
     document_path: Mapped[str | None] = mapped_column(String(255))
     status: Mapped[str] = mapped_column(String(20), default="pending", index=True)
     approver_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
     approver_comment: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     decided_at: Mapped[datetime | None] = mapped_column(DateTime)
+    approval_stage: Mapped[str] = mapped_column(String(20), default="pending_manager", index=True)
+    manager_decided_at: Mapped[datetime | None] = mapped_column(DateTime)
+    manager_decided_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    manager_comment: Mapped[str | None] = mapped_column(Text)
+    hr_decided_at: Mapped[datetime | None] = mapped_column(DateTime)
+    hr_comment: Mapped[str | None] = mapped_column(Text)
 
     user = relationship("User", foreign_keys=[user_id], lazy="joined")
     approver = relationship("User", foreign_keys=[approver_id], lazy="joined")
+    manager_decided_by = relationship("User", foreign_keys=[manager_decided_by_id], lazy="joined")
 
 
 class RegularizationRequest(Base):
@@ -227,14 +279,22 @@ class RegularizationRequest(Base):
     requested_check_in: Mapped[datetime | None] = mapped_column(DateTime)
     requested_check_out: Mapped[datetime | None] = mapped_column(DateTime)
     reason: Mapped[str] = mapped_column(Text)
+    mentions_json: Mapped[str] = mapped_column(Text, default="[]")
     status: Mapped[str] = mapped_column(String(20), default="pending", index=True)
     approver_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
     approver_comment: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     decided_at: Mapped[datetime | None] = mapped_column(DateTime)
+    approval_stage: Mapped[str] = mapped_column(String(20), default="pending_manager", index=True)
+    manager_decided_at: Mapped[datetime | None] = mapped_column(DateTime)
+    manager_decided_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    manager_comment: Mapped[str | None] = mapped_column(Text)
+    hr_decided_at: Mapped[datetime | None] = mapped_column(DateTime)
+    hr_comment: Mapped[str | None] = mapped_column(Text)
 
     user = relationship("User", foreign_keys=[user_id], lazy="joined")
     approver = relationship("User", foreign_keys=[approver_id], lazy="joined")
+    manager_decided_by = relationship("User", foreign_keys=[manager_decided_by_id], lazy="joined")
 
 
 class Holiday(Base):
@@ -267,7 +327,71 @@ class Notification(Base):
     body: Mapped[str | None] = mapped_column(Text)
     kind: Mapped[str] = mapped_column(String(40), default="info")
     is_read: Mapped[bool] = mapped_column(Boolean, default=False)
+    actor_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    entity_type: Mapped[str | None] = mapped_column(String(40))
+    entity_id: Mapped[int | None] = mapped_column(Integer)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    actor = relationship("User", foreign_keys=[actor_id], lazy="joined")
+
+
+class EmployeeRequest(Base):
+    """A private employee help request shared only with named participants."""
+    __tablename__ = "employee_requests"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    requester_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    title: Mapped[str] = mapped_column(String(200))
+    category: Mapped[str] = mapped_column(String(80))
+    priority: Mapped[str] = mapped_column(String(20), default="normal")
+    description: Mapped[str] = mapped_column(Text)
+    attachment_path: Mapped[str | None] = mapped_column(String(255))
+    status: Mapped[str] = mapped_column(String(20), default="open", index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    requester = relationship("User", foreign_keys=[requester_id], lazy="joined")
+    participants = relationship(
+        "EmployeeRequestParticipant",
+        back_populates="request",
+        cascade="all, delete-orphan",
+    )
+    messages = relationship(
+        "EmployeeRequestMessage",
+        back_populates="request",
+        cascade="all, delete-orphan",
+        order_by="EmployeeRequestMessage.created_at",
+    )
+
+
+class EmployeeRequestParticipant(Base):
+    __tablename__ = "employee_request_participants"
+    __table_args__ = (
+        UniqueConstraint("request_id", "user_id", name="uq_request_participant"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    request_id: Mapped[int] = mapped_column(ForeignKey("employee_requests.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    added_by_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    request = relationship("EmployeeRequest", back_populates="participants")
+    user = relationship("User", foreign_keys=[user_id], lazy="joined")
+
+
+class EmployeeRequestMessage(Base):
+    __tablename__ = "employee_request_messages"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    request_id: Mapped[int] = mapped_column(ForeignKey("employee_requests.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    message_type: Mapped[str] = mapped_column(String(20), default="comment")
+    body: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    request = relationship("EmployeeRequest", back_populates="messages")
+    user = relationship("User", foreign_keys=[user_id], lazy="joined")
 
 
 class EmployeeDocument(Base):

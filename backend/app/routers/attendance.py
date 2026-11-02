@@ -7,12 +7,16 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..deps import client_info, get_current_user
+from ..attendance_location import (
+    attendance_now,
+    validate_attendance_location,
+)
 from ..models import (
     Attendance, AttendanceBreak, Holiday, LeaveRequest, User, WFHRequest,
 )
 from ..schemas import CheckInRequest, CheckOutRequest
 from ..serializers import attendance_out
-from ..utils import audit, parse_dt, recompute_attendance
+from ..utils import audit, recompute_attendance
 
 router = APIRouter(prefix="/attendance", tags=["attendance"])
 
@@ -22,26 +26,58 @@ def _today_record(db: Session, user_id: int, for_date: date) -> Attendance | Non
         Attendance.user_id == user_id, Attendance.date == for_date).first()
 
 
+def _has_approved_wfh(db: Session, user_id: int, for_date: date) -> bool:
+    return db.query(WFHRequest.id).filter(
+        WFHRequest.user_id == user_id,
+        WFHRequest.date == for_date,
+        WFHRequest.status == "approved",
+    ).first() is not None
+
+
+def _require_checkout_location(body: CheckOutRequest) -> tuple[float, float, float]:
+    if (
+        body.latitude is None
+        or body.longitude is None
+        or body.accuracy_meters is None
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Allow location access to check out.",
+        )
+    return body.latitude, body.longitude, body.accuracy_meters
+
+
 @router.get("/today")
 def today(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    att = _today_record(db, user.id, date.today())
+    att = _today_record(db, user.id, attendance_now().date())
     return attendance_out(att) if att else None
 
 
 @router.post("/check-in")
 def check_in(body: CheckInRequest, request: Request,
              user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    now = parse_dt(body.local_time)
+    now = attendance_now()
     att = _today_record(db, user.id, now.date())
     if att and att.check_in:
         raise HTTPException(status_code=400, detail="You have already checked in today")
+
+    approved_wfh = _has_approved_wfh(db, user.id, now.date())
+    distance = validate_attendance_location(
+        db,
+        body.latitude,
+        body.longitude,
+        body.accuracy_meters,
+        allow_outside_office=approved_wfh,
+    )
     info = client_info(request)
     if att is None:
         att = Attendance(user_id=user.id, date=now.date())
         db.add(att)
     att.check_in = now
-    att.status = "present"
+    att.status = "wfh" if approved_wfh else "present"
     att.latitude, att.longitude = body.latitude, body.longitude
+    att.location_accuracy_meters = body.accuracy_meters
+    att.distance_from_office_meters = distance
     att.ip_address, att.browser = info["ip"], info["browser"]
     att.os, att.device = info["os"], info["device"]
     recompute_attendance(att)
@@ -54,17 +90,31 @@ def check_in(body: CheckInRequest, request: Request,
 @router.post("/check-out")
 def check_out(body: CheckOutRequest, request: Request,
               user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    now = parse_dt(body.local_time)
+    now = attendance_now()
     att = _today_record(db, user.id, now.date())
     if att is None or att.check_in is None:
         raise HTTPException(status_code=400, detail="You have not checked in today")
     if att.check_out:
         raise HTTPException(status_code=400, detail="You have already checked out today")
+
+    latitude, longitude, accuracy = _require_checkout_location(body)
+    approved_wfh = _has_approved_wfh(db, user.id, now.date())
+    distance = validate_attendance_location(
+        db,
+        latitude,
+        longitude,
+        accuracy,
+        allow_outside_office=approved_wfh,
+    )
     # Auto-close any open break at checkout.
     for br in att.breaks:
         if br.end_time is None:
             br.end_time = now
     att.check_out = now
+    att.checkout_latitude = latitude
+    att.checkout_longitude = longitude
+    att.checkout_accuracy_meters = accuracy
+    att.checkout_distance_from_office_meters = distance
     recompute_attendance(att)
     audit(db, user.id, "check_out", "attendance",
           f"Checked out at {now:%H:%M}", client_info(request))
@@ -73,10 +123,51 @@ def check_out(body: CheckOutRequest, request: Request,
     return attendance_out(att)
 
 
+@router.post("/recheck-in")
+def recheck_in(body: CheckInRequest, request: Request,
+               user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Undo a mistaken checkout for up to 60 seconds, keeping evidence in audit."""
+    now = attendance_now()
+    att = _today_record(db, user.id, now.date())
+    if att is None or att.check_in is None or att.check_out is None:
+        raise HTTPException(status_code=400, detail="There is no recent checkout to undo")
+    elapsed = (now - att.check_out).total_seconds()
+    if elapsed < 0 or elapsed > 60:
+        raise HTTPException(status_code=400, detail="The one-minute recheck-in window has expired")
+
+    approved_wfh = _has_approved_wfh(db, user.id, now.date())
+    distance = validate_attendance_location(
+        db, body.latitude, body.longitude, body.accuracy_meters,
+        allow_outside_office=approved_wfh,
+    )
+    previous_checkout = att.check_out.isoformat()
+    previous_location = (
+        f"; previous checkout location={att.checkout_latitude},{att.checkout_longitude}"
+        f" accuracy={att.checkout_accuracy_meters}m"
+    )
+    att.check_out = None
+    att.checkout_latitude = None
+    att.checkout_longitude = None
+    att.checkout_accuracy_meters = None
+    att.checkout_distance_from_office_meters = None
+    att.status = "wfh" if approved_wfh else "present"
+    recompute_attendance(att)
+    audit(
+        db, user.id, "undo_check_out", "attendance",
+        f"Reopened attendance within one minute of checkout at {previous_checkout}"
+        f"; recheck location={body.latitude},{body.longitude}; accuracy={body.accuracy_meters}m; "
+        f"distance={distance}m{previous_location}",
+        client_info(request),
+    )
+    db.commit()
+    db.refresh(att)
+    return attendance_out(att)
+
+
 @router.post("/break/start")
 def break_start(body: CheckOutRequest, request: Request,
                 user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    now = parse_dt(body.local_time)
+    now = attendance_now()
     att = _today_record(db, user.id, now.date())
     if att is None or att.check_in is None:
         raise HTTPException(status_code=400, detail="Check in before starting a break")
@@ -94,7 +185,7 @@ def break_start(body: CheckOutRequest, request: Request,
 @router.post("/break/end")
 def break_end(body: CheckOutRequest, request: Request,
               user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    now = parse_dt(body.local_time)
+    now = attendance_now()
     att = _today_record(db, user.id, now.date())
     open_break = next((b for b in (att.breaks if att else []) if b.end_time is None), None)
     if open_break is None:
@@ -107,7 +198,15 @@ def break_end(body: CheckOutRequest, request: Request,
     return attendance_out(att)
 
 
-def build_month_calendar(db: Session, target_user: User, year: int, month: int) -> dict:
+def build_month_calendar(
+    db: Session,
+    target_user: User,
+    year: int,
+    month: int,
+    *,
+    include_location: bool = True,
+    include_admin_audit: bool = False,
+) -> dict:
     """Merge attendance rows, approved leave/WFH and holidays into day cells."""
     first = date(year, month, 1)
     last = date(year, month, pycalendar.monthrange(year, month)[1])
@@ -131,12 +230,19 @@ def build_month_calendar(db: Session, target_user: User, year: int, month: int) 
             leave_dates[d] = lv.leave_type
             d += timedelta(days=1)
 
-    days, today_d, d = [], date.today(), first
+    days, today_d, d = [], attendance_now().date(), first
     while d <= last:
         cell = {"date": d.isoformat(), "status": None, "detail": None}
         att = records.get(d)
         if att:
-            cell.update(status=att.status, detail=attendance_out(att))
+            cell.update(
+                status=att.status,
+                detail=attendance_out(
+                    att,
+                    include_location=include_location,
+                    include_admin_audit=include_admin_audit,
+                ),
+            )
         elif d in holidays and holidays[d].holiday_type != "optional":
             cell.update(status="holiday", detail={"name": holidays[d].name})
         elif d in leave_dates:

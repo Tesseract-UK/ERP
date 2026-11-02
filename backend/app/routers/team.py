@@ -1,21 +1,24 @@
 """Manager views: team attendance, team calendar."""
 from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..deps import require_manager
+from ..deps import client_info, require_manager
 from ..models import Attendance, User
 from ..serializers import attendance_out, user_brief
+from ..utils import audit
 from .attendance import build_month_calendar
 
 router = APIRouter(prefix="/team", tags=["team"])
 
 
 def team_query(db: Session, user: User):
-    """Direct reports for managers; everyone (active) for HR/Admin."""
-    q = db.query(User).filter(User.is_active.is_(True))
+    """Direct reports for managers; active staff for HR; all staff for Admin."""
+    q = db.query(User)
+    if user.role != "admin":
+        q = q.filter(User.is_active.is_(True))
     if user.role == "manager":
         q = q.filter(User.manager_id == user.id)
     return q
@@ -51,11 +54,15 @@ def team_attendance(
     rows = q.order_by(Attendance.date.desc()) \
         .offset((page - 1) * page_size).limit(page_size).all()
     return {"total": total, "page": page, "page_size": page_size,
-            "items": [attendance_out(a, include_user=True) for a in rows]}
+            "items": [attendance_out(
+                a,
+                include_user=True,
+                include_admin_audit=user.role == "admin",
+            ) for a in rows]}
 
 
 @router.get("/calendar/{employee_id}")
-def member_calendar(employee_id: int, year: int, month: int,
+def member_calendar(employee_id: int, year: int, month: int, request: Request,
                     user: User = Depends(require_manager), db: Session = Depends(get_db)):
     target = db.get(User, employee_id)
     if target is None:
@@ -64,5 +71,17 @@ def member_calendar(employee_id: int, year: int, month: int,
         raise HTTPException(status_code=403, detail="Not a member of your team")
     if not (1 <= month <= 12):
         raise HTTPException(status_code=400, detail="Invalid month")
+    if user.role == "admin":
+        audit(db, user.id, "view_employee_attendance", "admin",
+              f"Viewed attendance calendar for employee #{target.id} ({year}-{month:02d})",
+              client_info(request))
+        db.commit()
     return {"employee": user_brief(target),
-            **build_month_calendar(db, target, year, month)}
+            **build_month_calendar(
+                db,
+                target,
+                year,
+                month,
+                include_location=user.role == "admin",
+                include_admin_audit=user.role == "admin",
+            )}

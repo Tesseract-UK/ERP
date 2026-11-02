@@ -28,7 +28,9 @@ Backend (Python 3.11+; uses SQLite locally, PostgreSQL in production):
 cd backend
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-python -m app.seed          # creates tables + demo data
+python -m app.seed          # seeds a blank local SQLite database only
+# To replace the local demo data with the 25-person sample:
+python -m app.seed --reset-local
 uvicorn app.main:app --reload --port 8000
 ```
 
@@ -40,8 +42,10 @@ npm install
 npm run dev                 # http://localhost:5173
 ```
 
-Demo accounts (password `Password@123`):
-`admin@tesseractuk.in` · `hr@tesseractuk.in` · `manager@tesseractuk.in` · `employee@tesseractuk.in`
+The local demo seed creates 25 synthetic accounts, including `demo.admin@tesseractuk.in`,
+`demo.hr1@tesseractuk.in`, `demo.manager1@tesseractuk.in`, and 18 `demo.<name>@tesseractuk.in`
+employee accounts. All use password `DemoOnly@123` when local password login is enabled.
+These are fictional local test accounts; never copy the demo seed into production.
 
 API docs: http://localhost:8000/docs
 
@@ -51,9 +55,17 @@ API docs: http://localhost:8000/docs
 
 1. Push this repo to GitHub and create a **Blueprint** on Render pointing at
    `render.yaml` — it provisions the web service and a PostgreSQL database.
-2. After the first deploy, open a Render shell and run `python -m app.seed`
-   (or create your admin user via the API).
+2. Do **not** run the demo seed on the deployed database. Create the initial
+   production administrator with `python -m app.create_admin` in the Render shell;
+   employees then join through the configured company Google sign-in flow.
 3. Set `CORS_ORIGINS` to your Vercel URL.
+4. Set `APP_ENV=production`, `ALLOWED_EMAIL_DOMAINS=tesseractuk.in`, and
+   `FRONTEND_URL` to the deployed frontend origin. Configure
+   `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `GOOGLE_REDIRECT_URI` in the
+   Render dashboard, then register that exact HTTPS callback URI in Google
+   Cloud. Production startup rejects missing secrets, SQLite, and local HTTP
+   origins. For the cross-site Render API session cookie use
+   `COOKIE_SECURE=true` and `COOKIE_SAMESITE=none` as in `render.yaml`.
 
 Manual alternative: create a Web Service with root dir `backend`, build
 `pip install -r requirements.txt`, start
@@ -67,7 +79,8 @@ Manual alternative: create a Web Service with root dir `backend`, build
 ### Frontend → Vercel
 
 1. Import the repo in Vercel with **root directory `frontend`** (framework: Vite).
-2. Set env var `VITE_API_URL` to your Render API URL (e.g. `https://tesseract-hrms-api.onrender.com`).
+2. Set env var `VITE_API_URL` to your deployed Render API HTTPS URL (e.g.
+   `https://tesseract-hrms-api.onrender.com`) before the production build.
 3. `vercel.json` already handles SPA rewrites for client-side routing.
 
 ## Architecture notes

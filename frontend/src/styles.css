@@ -60,6 +60,13 @@ a { color: var(--brand); text-decoration: none; }
 .sidebar a:hover { background: rgba(255, 255, 255, .05); color: var(--ink); }
 .sidebar a.active { background: var(--brand-soft); color: var(--brand); font-weight: 600; }
 .sidebar .icon { width: 18px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; opacity: .85; }
+.sidebar-notifications { width: 100%; display: flex; align-items: center; gap: 10px;
+  padding: 8px 12px; margin: 4px 0; border: 0; border-radius: 8px; background: transparent;
+  color: var(--ink-2); font: inherit; font-size: 13.5px; font-weight: 500; text-align: left; cursor: pointer; }
+.sidebar-notifications:hover { background: rgba(255, 255, 255, .05); color: var(--ink); }
+.nav-count { margin-left: auto; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 99px;
+  display: inline-flex; align-items: center; justify-content: center; background: var(--danger);
+  color: #fff; font-size: 11px; font-weight: 700; }
 
 .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .topbar {
@@ -245,18 +252,10 @@ table.table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .close-x:hover { background: var(--neutral-soft); color: var(--ink); }
 
 /* notifications */
-.bell-wrap { position: relative; }
-.bell { position: relative; background: none; border: 1px solid var(--border-strong);
-  border-radius: 8px; width: 36px; height: 36px; color: var(--ink-2);
-  display: flex; align-items: center; justify-content: center; }
-.bell:hover { background: var(--surface-2); }
-.bell .dot { position: absolute; top: -5px; right: -5px; background: var(--danger);
-  color: #14060a; font-size: 10px; font-weight: 700; min-width: 17px; height: 17px;
-  border-radius: 99px; display: flex; align-items: center; justify-content: center; padding: 0 4px; }
-.notif-panel { position: absolute; right: 0; top: 44px; width: 340px; max-height: 420px;
-  overflow-y: auto; background: var(--surface); border: 1px solid var(--border-strong);
-  border-radius: 12px; box-shadow: var(--shadow-lg); z-index: 60; }
-.notif-item { padding: 12px 14px; border-bottom: 1px solid var(--border); font-size: 13px; }
+.notification-list { max-height: min(62vh, 620px); overflow-y: auto; margin: -8px -8px; }
+.notif-item { display: block; width: 100%; padding: 12px 14px; border: 0; border-bottom: 1px solid var(--border);
+  background: transparent; color: var(--ink); font: inherit; font-size: 13px; text-align: left; cursor: pointer; }
+.notif-item:hover { background: var(--surface-2); }
 .notif-item.unread { background: var(--brand-soft); }
 .notif-item .t { font-weight: 600; }
 .notif-item .b { color: var(--ink-2); margin-top: 2px; font-size: 12.5px; }

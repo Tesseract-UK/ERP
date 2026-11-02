@@ -3,7 +3,7 @@ export {
   LayoutDashboard, Clock, Plane, Home, PenLine, User, CheckSquare, Users,
   CalendarDays, IdCard, ClipboardList, BarChart3, Megaphone, Building2,
   ShieldCheck, Bell, Menu, Inbox, ChevronLeft, ChevronRight, AlertTriangle,
-  Cake, CheckCircle2, Download, X, LogOut, ArrowRight, Eye, EyeOff,
+  Cake, CheckCircle2, Download, X, LogOut, ArrowRight, Eye, EyeOff, MessageSquare,
 } from 'lucide-react'
 
 // The app's logo mark (from Assests/WithoutBg.svg). Inherits color via

@@ -1,15 +1,21 @@
 
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useAuth } from '../AuthContext'
+import { API_BASE } from '../api'
 import { Logo } from '../components/icons'
-
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
 export default function Signup() {
   const { authError } = useAuth()
   const [startingGoogleLogin, setStartingGoogleLogin] = useState(false)
+  const [error, setError] = useState('')
 
   const startGoogleSignup = () => {
+    if (!API_BASE) {
+      setError('HRMS signup is unavailable because the API URL is not configured.')
+      return
+    }
+    setError('')
     setStartingGoogleLogin(true)
     window.location.assign(`${API_BASE}/auth/google/login`)
   }
@@ -38,15 +44,16 @@ export default function Signup() {
           className="help-text"
           style={{ marginBottom: 22, textAlign: 'center' }}
         >
-          Continue with your company Google account to access HRMS.
+          Use an active, verified Google account ending in @tesseractuk.in. Other email domains are not allowed.
         </p>
 
-        {authError && (
+        {(error || authError) && (
           <div
+            role="alert"
             className="error-text"
             style={{ textAlign: 'center', marginBottom: 14 }}
           >
-            {authError}
+            {error || authError}
           </div>
         )}
 
@@ -87,7 +94,7 @@ export default function Signup() {
 
         <p className="help-text" style={{ marginTop: 20, textAlign: 'center' }}>
           Already have an account?{' '}
-          <a href="/login">Sign in</a>
+          <Link to="/login">Sign in</Link>
         </p>
       </div>
     </div>

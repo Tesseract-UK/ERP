@@ -1,6 +1,6 @@
 // HR reports with CSV export.
 import { useEffect, useState } from 'react'
-import { api, downloadCsv } from '../api'
+import { api, downloadCsv, localNowIso } from '../api'
 import { EmptyState, Spinner, fmtDate, useToast } from '../components/ui'
 import { BarChart3, Download } from '../components/icons'
 
@@ -19,6 +19,12 @@ export default function Reports() {
   const [departments, setDepartments] = useState([])
   const [departmentId, setDepartmentId] = useState('')
   const [rows, setRows] = useState(null)
+  const [detailFrom, setDetailFrom] = useState(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`)
+  const [detailTo, setDetailTo] = useState(localNowIso().slice(0, 10))
+  const [employeeSearch, setEmployeeSearch] = useState('')
+  const [employeeOptions, setEmployeeOptions] = useState([])
+  const [selectedEmployee, setSelectedEmployee] = useState(null)
+  const [detailBusy, setDetailBusy] = useState(false)
 
   const cfg = REPORTS.find((r) => r.id === report)
   const query = () => {
@@ -33,6 +39,18 @@ export default function Reports() {
   }, [])
 
   useEffect(() => {
+    const term = employeeSearch.trim()
+    if (term.length < 2) { setEmployeeOptions([]); return undefined }
+    let active = true
+    const timer = window.setTimeout(() => {
+      api.get(`/hr/employees?${new URLSearchParams({ search: term, page_size: 30 })}`)
+        .then((result) => { if (active) setEmployeeOptions(result.items || []) })
+        .catch((error) => { if (active) toast(error.message, 'error') })
+    }, 250)
+    return () => { active = false; window.clearTimeout(timer) }
+  }, [employeeSearch, toast])
+
+  useEffect(() => {
     setRows(null)
     api.get(`/hr/reports/${report}?${query()}`)
       .then(setRows).catch((e) => toast(e.message, 'error'))
@@ -45,10 +63,61 @@ export default function Reports() {
       .catch((e) => toast(e.message, 'error'))
   }
 
+  const exportDetailedAttendance = async () => {
+    if (!detailFrom || !detailTo || detailFrom > detailTo) {
+      toast('Choose a valid date range', 'error')
+      return
+    }
+    setDetailBusy(true)
+    const params = new URLSearchParams({ date_from: detailFrom, date_to: detailTo })
+    if (selectedEmployee) params.set('employee_id', selectedEmployee.id)
+    const scope = selectedEmployee ? selectedEmployee.employee_code : 'all_staff'
+    try {
+      await downloadCsv(
+        `/hr/reports/attendance-detail?${params}`,
+        `attendance_${scope}_${detailFrom}_${detailTo}.csv`,
+      )
+      toast('Detailed attendance CSV downloaded', 'success')
+    } catch (error) { toast(error.message, 'error') }
+    finally { setDetailBusy(false) }
+  }
+
   const headers = rows?.length ? Object.keys(rows[0]) : []
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <section className="card pad">
+        <div style={{ marginBottom: 12 }}><h3>Detailed Attendance Export</h3>
+          <div className="sub">Daily punches, leave/WFH/absence status, work hours, and employee totals. Maximum range: one year.</div></div>
+        <div className="toolbar" style={{ alignItems: 'end', flexWrap: 'wrap' }}>
+          <label className="field"><span className="label">From</span>
+            <input className="input" type="date" value={detailFrom} max={detailTo || undefined}
+              onChange={(event) => setDetailFrom(event.target.value)} /></label>
+          <label className="field"><span className="label">To</span>
+            <input className="input" type="date" value={detailTo} min={detailFrom || undefined}
+              onChange={(event) => setDetailTo(event.target.value)} /></label>
+          <div className="field" style={{ position: 'relative', minWidth: 240, flex: 1 }}>
+            <span className="label">Employee (optional)</span>
+            {selectedEmployee ? <div className="input" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span>{selectedEmployee.full_name} · {selectedEmployee.employee_code}</span>
+              <button type="button" className="btn ghost sm" onClick={() => setSelectedEmployee(null)}>All staff</button>
+            </div> : <input className="input" value={employeeSearch} placeholder="Search name or employee code"
+              onChange={(event) => setEmployeeSearch(event.target.value)} />}
+            {!selectedEmployee && employeeOptions.length > 0 && <div role="listbox" className="card" style={{ position: 'absolute', zIndex: 10, top: '100%', left: 0, right: 0, maxHeight: 220, overflowY: 'auto' }}>
+              {employeeOptions.map((employee) => <button key={employee.id} type="button" role="option" className="btn ghost sm"
+                style={{ display: 'block', width: '100%', textAlign: 'left', padding: 9 }}
+                onClick={() => { setSelectedEmployee(employee); setEmployeeSearch(''); setEmployeeOptions([]) }}>
+                {employee.full_name} · {employee.employee_code}
+              </button>)}
+            </div>}
+          </div>
+          <button className="btn" disabled={detailBusy || !detailFrom || !detailTo} onClick={exportDetailedAttendance}>
+            <Download size={14} /> {detailBusy ? 'Preparing…' : 'Export Daily Sheet'}
+          </button>
+        </div>
+        <p className="help-text" style={{ marginTop: 10 }}>Leave Employee blank to export all active employees. The file contains daily rows followed by a summary row for each employee.</p>
+      </section>
+
       <div className="card pad toolbar">
         <select className="input" style={{ width: 200 }} value={report} onChange={(e) => setReport(e.target.value)}>
           {REPORTS.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
@@ -74,7 +143,7 @@ export default function Reports() {
           </select>
         )}
         <div style={{ flex: 1 }} />
-        <button className="btn secondary" onClick={exportCsv} disabled={!rows?.length}>
+        <button className="btn secondary" onClick={exportCsv} disabled={rows === null}>
           <Download size={14} /> Export CSV</button>
       </div>
 

@@ -1,8 +1,8 @@
 // Work-from-home requests.
 import { useCallback, useEffect, useState } from 'react'
-import { api } from '../api'
+import { api, API_BASE } from '../api'
 import {
-  ConfirmDialog, EmptyState, Modal, Spinner, StatusBadge, fmtDate, useToast,
+  ConfirmDialog, EmptyState, Modal, Spinner, StatusBadge, fmtDate, fmtDateTime, useToast,
 } from '../components/ui'
 import { Home } from '../components/icons'
 import { WfhApplyForm } from '../components/RequestForms'
@@ -13,6 +13,7 @@ export default function WFH() {
   const [balance, setBalance] = useState(null)
   const [showApply, setShowApply] = useState(false)
   const [cancelId, setCancelId] = useState(null)
+  const [selected, setSelected] = useState(null)
   const [busy, setBusy] = useState(false)
 
   const load = useCallback(() => {
@@ -63,7 +64,7 @@ export default function WFH() {
           ? <EmptyState icon={Home} title="No WFH requests yet" hint="Your work-from-home requests will appear here." />
           : (
             <div className="table-wrap"><table className="table">
-              <thead><tr><th>Date</th><th>Reason</th><th>Status</th><th>Reviewed By</th><th></th></tr></thead>
+              <thead><tr><th>Date</th><th>Reason</th><th>Status</th><th>Reviewed By</th><th>Details</th></tr></thead>
               <tbody>
                 {rows.map((r) => (
                   <tr key={r.id}>
@@ -72,8 +73,10 @@ export default function WFH() {
                     <td><StatusBadge status={r.status} />
                       {r.approver_comment && <div className="help-text">“{r.approver_comment}”</div>}</td>
                     <td>{r.approver_name || '—'}</td>
-                    <td>{r.status === 'pending' &&
-                      <button className="btn ghost sm" onClick={() => setCancelId(r.id)}>Cancel</button>}</td>
+                    <td style={{ whiteSpace: 'nowrap' }}>
+                      <button className="btn ghost sm" onClick={() => setSelected(r)}>View</button>{' '}
+                      {r.status === 'pending' && <button className="btn ghost sm" onClick={() => setCancelId(r.id)}>Cancel</button>}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -87,6 +90,14 @@ export default function WFH() {
                         onDone={() => { setShowApply(false); load() }} />
         </Modal>
       )}
+      {selected && <Modal title="WFH request details" onClose={() => setSelected(null)}>
+        <p><strong>Date:</strong> {fmtDate(selected.date)}</p>
+        <p><strong>Reason:</strong> {selected.reason}</p>
+        <p><strong>Status:</strong> {titleCase(selected.status)} · <strong>Submitted:</strong> {fmtDateTime(selected.created_at)}</p>
+        {selected.approver_name && <p><strong>Reviewed by:</strong> {selected.approver_name}</p>}
+        {selected.approver_comment && <p><strong>Decision note:</strong> {selected.approver_comment}</p>}
+        {selected.document_path && <p style={{ marginTop: 14 }}><a href={`${API_BASE}/files/${selected.document_path.split(/[\\/]/).map(encodeURIComponent).join('/')}`} target="_blank" rel="noreferrer">Open supporting document</a></p>}
+      </Modal>}
       {cancelId && <ConfirmDialog title="Cancel WFH request" danger busy={busy}
         message="Are you sure you want to cancel this pending WFH request?"
         confirmLabel="Yes, cancel it" onConfirm={cancel} onClose={() => setCancelId(null)} />}

@@ -5,11 +5,15 @@ import { EmptyState, Pagination, Spinner, fmtDateTime, useToast } from '../compo
 import { ShieldCheck } from '../components/icons'
 
 const MODULES = ['auth', 'attendance', 'leaves', 'wfh', 'regularization',
-                 'approvals', 'profile', 'hr', 'admin']
+                 'approvals', 'profile', 'hr', 'requests', 'admin']
 
 export default function AuditLogs() {
   const toast = useToast()
   const [module, setModule] = useState('')
+  const [actor, setActor] = useState('')
+  const [action, setAction] = useState('')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
   const [page, setPage] = useState(1)
   const [data, setData] = useState(null)
 
@@ -17,8 +21,12 @@ export default function AuditLogs() {
     setData(null)
     const p = new URLSearchParams({ page, page_size: 50 })
     if (module) p.append('module', module)
+    if (actor) p.append('actor', actor)
+    if (action) p.append('action', action)
+    if (dateFrom) p.append('date_from', dateFrom)
+    if (dateTo) p.append('date_to', dateTo)
     api.get(`/admin/audit-logs?${p}`).then(setData).catch((e) => toast(e.message, 'error'))
-  }, [module, page, toast])
+  }, [module, actor, action, dateFrom, dateTo, page, toast])
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -28,6 +36,14 @@ export default function AuditLogs() {
           <option value="">All modules</option>
           {MODULES.map((m) => <option key={m} value={m}>{m}</option>)}
         </select>
+        <input className="input" style={{ width: 190 }} placeholder="Actor name or email"
+               value={actor} onChange={(e) => { setActor(e.target.value); setPage(1) }} />
+        <input className="input" style={{ width: 180 }} placeholder="Action contains…"
+               value={action} onChange={(e) => { setAction(e.target.value); setPage(1) }} />
+        <label className="help-text">From <input className="input" type="date" value={dateFrom}
+          onChange={(e) => { setDateFrom(e.target.value); setPage(1) }} /></label>
+        <label className="help-text">To <input className="input" type="date" value={dateTo}
+          onChange={(e) => { setDateTo(e.target.value); setPage(1) }} /></label>
       </div>
       <div className="card">
         {data === null ? <Spinner /> : data.items.length === 0

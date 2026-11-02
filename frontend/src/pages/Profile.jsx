@@ -60,18 +60,6 @@ export default function Profile() {
     }
   }
 
-  const requestPasswordChange = async () => {
-    setBusy(true)
-    try {
-      const res = await api.post('/auth/password-change-request')
-      toast(res.message, 'success')
-    } catch (err) {
-      toast(err.message, 'error')
-    } finally {
-      setBusy(false)
-    }
-  }
-
   return (
     <div className="grid cols-2" style={{ alignItems: 'start' }}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -129,9 +117,9 @@ export default function Profile() {
             <button className="btn" disabled={busy}>{busy ? 'Saving…' : 'Save Changes'}</button>
           </form>
         </div>
-        <div className="card">
-          <div className="card-head"><h3>Password</h3></div>
-          {user.role === 'admin' ? (
+        {user.role === 'admin' && (
+          <div className="card">
+            <div className="card-head"><h3>Admin password</h3></div>
             <form className="card-body" onSubmit={changePassword}>
               <Field label="Current password" required>
                 <PasswordInput required autoComplete="current-password"
@@ -145,19 +133,8 @@ export default function Profile() {
               </Field>
               <button className="btn" disabled={busy}>Update Password</button>
             </form>
-          ) : (
-            <div className="card-body">
-              <p style={{ color: 'var(--ink-2)', marginBottom: 12 }}>
-                Company policy: password changes need administrator approval.
-                Send a request, and once an admin approves it you will be asked to
-                set a new password at your next sign-in.
-              </p>
-              <button className="btn secondary" disabled={busy} onClick={requestPasswordChange}>
-                {busy ? 'Sending…' : 'Request Password Change'}
-              </button>
-            </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
     </div>
   )

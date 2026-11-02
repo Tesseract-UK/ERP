@@ -4,6 +4,7 @@ import { useAuth } from './AuthContext'
 import Layout from './components/Layout'
 import { Spinner } from './components/ui'
 import Login from './pages/Login'
+import AdminLogin from './pages/AdminLogin'
 import Signup from './pages/Signup'
 import Onboarding from './pages/Onboarding'
 import Dashboard from './pages/Dashboard'
@@ -13,6 +14,7 @@ import WFH from './pages/WFH'
 import Regularization from './pages/Regularization'
 import Profile from './pages/Profile'
 import Approvals from './pages/Approvals'
+import Requests from './pages/Requests'
 import Team from './pages/Team'
 import TeamCalendar from './pages/TeamCalendar'
 import Employees from './pages/Employees'
@@ -62,6 +64,11 @@ export default function App() {
       />
 
       <Route
+        path="/admin"
+        element={user ? <Navigate to="/" replace /> : <AdminLogin />}
+      />
+
+      <Route
         path="/signup"
         element={user ? <Navigate to="/" replace /> : <Signup />}
       />
@@ -73,6 +80,7 @@ export default function App() {
         <Route path="/wfh" element={<WFH />} />
         <Route path="/regularization" element={<Regularization />} />
         <Route path="/profile" element={<Profile />} />
+        <Route path="/requests" element={<Requests />} />
 
         <Route
           path="/approvals"

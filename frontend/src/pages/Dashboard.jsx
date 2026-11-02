@@ -1,7 +1,7 @@
 // Role-aware dashboard fed by a single /dashboard API call.
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { api, localNowIso } from '../api'
+import { api } from '../api'
 import { useAuth } from '../AuthContext'
 import {
   EmptyState, Spinner, StatusBadge, fmtDate, fmtHours, fmtTime, titleCase, useToast,
@@ -40,28 +40,102 @@ function getLiveWorkHours(att, nowMs) {
   return Math.max(workedMs / 3600000, 0)
 }
 
-function CheckInPanel({ att, onRefresh, workedHours }) {
+function getCurrentLocation(requiredAccuracyMeters) {
+  if (!navigator.geolocation) {
+    return Promise.reject(new Error('This browser cannot provide location. Use a browser with location support.'))
+  }
+
+  return new Promise((resolve, reject) => {
+    const watchTimeoutMs = 15000
+    let bestPosition = null
+    let watchId = null
+    let settled = false
+
+    const cleanup = () => {
+      if (watchId !== null) navigator.geolocation.clearWatch(watchId)
+      window.clearTimeout(timerId)
+    }
+    const finish = (callback, value) => {
+      if (settled) return
+      settled = true
+      cleanup()
+      callback(value)
+    }
+    const timerId = window.setTimeout(() => {
+      if (bestPosition) {
+        finish(reject, new Error(
+          `Your best location fix is accurate to about ${Math.round(bestPosition.coords.accuracy)} m; ` +
+          `attendance needs ${Math.round(requiredAccuracyMeters)} m or better. ` +
+          'Move near a window or try again outdoors.'
+        ))
+      } else {
+        finish(reject, new Error('The browser did not get a location fix within 15 seconds. Check device location services and this site’s location permission, then try again.'))
+      }
+    }, watchTimeoutMs)
+
+    try {
+      // Keep listening for a better GPS/Wi-Fi fix instead of submitting the
+      // first coarse position. The backend independently enforces the same limit.
+      watchId = navigator.geolocation.watchPosition(
+        (position) => {
+          if (!Number.isFinite(position.coords.accuracy) || position.coords.accuracy <= 0) return
+          if (!bestPosition || position.coords.accuracy < bestPosition.coords.accuracy) {
+            bestPosition = position
+          }
+          if (position.coords.accuracy <= requiredAccuracyMeters) finish(resolve, position)
+        },
+        (error) => {
+          if (error.code === error.PERMISSION_DENIED) {
+            finish(reject, new Error(
+              `Your browser has blocked location access for ${window.location.origin}. ` +
+              'Open this site’s permissions from the icon beside the address bar, set Location to Allow, reload the page, and try again. ' +
+              'Attendance is not recorded without location access.'
+            ))
+          } else if (error.code === error.POSITION_UNAVAILABLE && !bestPosition) {
+            finish(reject, new Error('Your location is unavailable. Check your device location settings and try again.'))
+          }
+        },
+        { enableHighAccuracy: true, timeout: watchTimeoutMs, maximumAge: 30000 },
+      )
+    } catch {
+      finish(reject, new Error('Your browser could not start location access. Check device location services and try again.'))
+    }
+  })
+}
+
+function CheckInPanel({ att, onRefresh, workedHours, maxGpsAccuracyMeters, recheckInSeconds = 0 }) {
   const toast = useToast()
   const [busy, setBusy] = useState(false)
+  const [actionError, setActionError] = useState('')
+  const [recheckSeconds, setRecheckSeconds] = useState(recheckInSeconds)
+
+  useEffect(() => setRecheckSeconds(recheckInSeconds), [recheckInSeconds, att?.check_out])
+  useEffect(() => {
+    if (recheckSeconds <= 0) return undefined
+    const timer = window.setInterval(() => {
+      setRecheckSeconds((remaining) => Math.max(remaining - 1, 0))
+    }, 1000)
+    return () => window.clearInterval(timer)
+  }, [recheckSeconds > 0])
 
   const act = async (path) => {
     setBusy(true)
+    setActionError('')
     try {
-      const payload = { local_time: localNowIso() }
-      if (path === '/attendance/check-in') {
-        // Capture geolocation when the browser allows it; never block check-in on it.
-        try {
-          const pos = await new Promise((res, rej) =>
-            navigator.geolocation.getCurrentPosition(res, rej, { timeout: 4000 }))
-          payload.latitude = pos.coords.latitude
-          payload.longitude = pos.coords.longitude
-        } catch { /* location denied or unavailable */ }
+      const payload = {}
+      if (path === '/attendance/check-in' || path === '/attendance/check-out' || path === '/attendance/recheck-in') {
+        const position = await getCurrentLocation(maxGpsAccuracyMeters)
+        payload.latitude = position.coords.latitude
+        payload.longitude = position.coords.longitude
+        payload.accuracy_meters = position.coords.accuracy
       }
       await api.post(path, payload)
+      setActionError('')
       toast(path.includes('check-in') ? 'Checked in. Have a great day!' :
             path.includes('check-out') ? 'Checked out. See you tomorrow!' : 'Done', 'success')
       onRefresh()
     } catch (err) {
+      setActionError(err.message)
       toast(err.message, 'error')
     } finally {
       setBusy(false)
@@ -87,6 +161,12 @@ function CheckInPanel({ att, onRefresh, workedHours }) {
       </div>
       <div className="toolbar">
         {!att?.check_in && <button className="btn success" disabled={busy} onClick={() => act('/attendance/check-in')}>Check In</button>}
+        {att?.check_in && att?.check_out && recheckSeconds > 0 && (
+          <button className="btn success" disabled={busy}
+                  onClick={() => act('/attendance/recheck-in')}>
+            {busy ? 'Rechecking…' : `Recheck In · 0:${String(recheckSeconds).padStart(2, '0')}`}
+          </button>
+        )}
         {att?.check_in && !att?.check_out && (
           <>
             {onBreak
@@ -96,6 +176,7 @@ function CheckInPanel({ att, onRefresh, workedHours }) {
           </>
         )}
       </div>
+      {actionError && <div role="alert" className="error-text" style={{ flexBasis: '100%', fontSize: 13, marginTop: 2 }}>{actionError}</div>}
     </div>
   )
 }
@@ -138,7 +219,13 @@ export default function Dashboard() {
         {att && <StatusBadge status={att.status} />}
       </div>
 
-      <CheckInPanel att={att} onRefresh={load} workedHours={workedHours} />
+      <CheckInPanel
+        att={att}
+        onRefresh={load}
+        workedHours={workedHours}
+        maxGpsAccuracyMeters={data.location_policy?.max_gps_accuracy_meters ?? 500}
+        recheckInSeconds={data.recheck_in_seconds ?? 0}
+      />
 
       <div className="grid cols-4">
         <Stat label="Leave Balance" value={leaveRemaining}
@@ -146,7 +233,7 @@ export default function Dashboard() {
         <Stat label="WFH Balance" value={bal.wfh.remaining} danger={bal.wfh.remaining < 0}
               sub={`of ${bal.wfh.allocated} accrued · ${bal.wfh.monthly_rate}/month`} />
         <Stat label="My Pending Requests" value={data.pending_requests.total}
-              sub={`Leave ${data.pending_requests.leave} · WFH ${data.pending_requests.wfh} · Reg. ${data.pending_requests.regularization}`} />
+              sub={`Leave ${data.pending_requests.leave} · WFH ${data.pending_requests.wfh} · Reg. ${data.pending_requests.regularization} · Other ${data.pending_requests.employee_request || 0}`} />
         <Stat label="Hours Today" value={fmtHours(workedHours)}
               sub={att?.overtime_hours > 0 ? `+${fmtHours(att.overtime_hours)} overtime` : 'Standard day: 8h'} />
       </div>

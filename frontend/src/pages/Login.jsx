@@ -1,107 +1,61 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 
-import { api, setLegacyToken } from '../api'
+import { API_BASE } from '../api'
 import { useAuth } from '../AuthContext'
-import { Field, PasswordInput } from '../components/ui'
 import { Logo } from '../components/icons'
 
 const GOOGLE_ERRORS = {
   google_not_configured:
-    'Google login abhi configure nahi hua hai. Email aur password se login karo.',
+    'Company Google sign-in is not configured on this server. Ask your administrator to configure Google OAuth, then restart the backend.',
   google_login_cancelled:
-    'Google login cancel ho gaya. Dobara try karo.',
+    'Google login was cancelled. You can try again.',
   google_login_incomplete:
-    'Google login complete nahi hua. Dobara try karo.',
+    'Google login did not complete. You can try again.',
   google_state_invalid:
-    'Google login session verify nahi ho paya. Dobara try karo.',
+    'The Google login session could not be verified. Please try again.',
   google_login_failed:
-    'Google login failed. Dobara try karo ya email-password use karo.',
+    'Google login failed. Please try again or contact your administrator.',
   google_account_mismatch:
-    'Ye Google account HRMS account se match nahi karta.',
+    'This Google account does not match the HRMS account.',
   email_domain_not_allowed:
-    'Is email domain ko login karne ki permission nahi hai.',
+    'Only a verified @tesseractuk.in account can access this organization.',
   account_deactivated:
-    'Tumhara account deactivate hai. HR ya Admin se contact karo.',
+    'This company email is linked to a deactivated HRMS account. Ask HR or an administrator to reactivate it.',
 }
 
 export default function Login() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const { user, setUser, setAuthError } = useAuth()
-
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
+  const { user } = useAuth()
   const [error, setError] = useState('')
-  const [loading, setLoading] = useState(false)
   const [googleLoading, setGoogleLoading] = useState(false)
 
   useEffect(() => {
     const code = searchParams.get('error')
-
     if (code) {
-      setError(
-        GOOGLE_ERRORS[code] ||
-          'Login nahi ho paya. Dobara try karo.',
-      )
+      setError(GOOGLE_ERRORS[code] || 'Google login failed. Please try again.')
     }
   }, [searchParams])
 
-  // Reset Google loading when returning to this page with Back/Forward.
   useEffect(() => {
-    const resetGoogleLoading = () => {
-      setGoogleLoading(false)
-    }
-
+    const resetGoogleLoading = () => setGoogleLoading(false)
     window.addEventListener('pageshow', resetGoogleLoading)
-
-    return () => {
-      window.removeEventListener('pageshow', resetGoogleLoading)
-    }
+    return () => window.removeEventListener('pageshow', resetGoogleLoading)
   }, [])
 
   useEffect(() => {
-    if (user) {
-      navigate('/', { replace: true })
-    }
+    if (user) navigate('/', { replace: true })
   }, [user, navigate])
-
-  const handleLogin = async (event) => {
-    event.preventDefault()
-
-    setError('')
-    setAuthError('')
-    setLoading(true)
-
-    try {
-      const result = await api.post('/auth/login', {
-        email: email.trim().toLowerCase(),
-        password,
-      })
-
-      if (!result?.access_token || !result?.user) {
-        throw new Error('Server se valid login response nahi mila.')
-      }
-
-      setLegacyToken(result.access_token)
-      setUser(result.user)
-
-      navigate('/', { replace: true })
-    } catch (err) {
-      setError(err.message || 'Login failed. Dobara try karo.')
-    } finally {
-      setLoading(false)
-    }
-  }
 
   const handleGoogleLogin = () => {
     setError('')
+    if (!API_BASE) {
+      setError('HRMS sign-in is unavailable because the API URL is not configured.')
+      return
+    }
     setGoogleLoading(true)
-
-    const apiBase =
-      import.meta.env.VITE_API_URL || 'http://localhost:8000'
-
-    window.location.assign(`${apiBase}/auth/google/login`)
+    window.location.assign(`${API_BASE}/auth/google/login`)
   }
 
   return (
@@ -109,10 +63,8 @@ export default function Login() {
       <div className="login-card">
         <div className="login-header">
           <Logo />
-
           <h1>Welcome back</h1>
-
-          <p>Sign in to your HRMS account</p>
+          <p>Sign in to your Tesseract HRMS account</p>
         </div>
 
         {error && (
@@ -132,78 +84,6 @@ export default function Login() {
           </div>
         )}
 
-        <form onSubmit={handleLogin}>
-          <div style={{ marginBottom: '16px' }}>
-            <Field label="Email address" required>
-              <input
-                className="input"
-                type="email"
-                name="email"
-                autoComplete="username"
-                placeholder="you@company.com"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                required
-              />
-            </Field>
-          </div>
-
-          <div style={{ marginBottom: '20px' }}>
-            <Field label="Password" required>
-              <PasswordInput
-                name="password"
-                autoComplete="current-password"
-                placeholder="Enter your password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                required
-              />
-            </Field>
-          </div>
-
-          <button
-            type="submit"
-            className="login-button"
-            disabled={loading}
-            style={{
-              width: '100%',
-              padding: '12px 16px',
-              cursor: loading ? 'wait' : 'pointer',
-            }}
-          >
-            {loading ? 'Signing in...' : 'Sign in with Email'}
-          </button>
-        </form>
-
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '12px',
-            margin: '22px 0',
-          }}
-        >
-          <div
-            style={{
-              height: '1px',
-              flex: 1,
-              background: '#e5e7eb',
-            }}
-          />
-
-          <span style={{ color: '#6b7280', fontSize: '13px' }}>
-            OR
-          </span>
-
-          <div
-            style={{
-              height: '1px',
-              flex: 1,
-              background: '#e5e7eb',
-            }}
-          />
-        </div>
-
         <button
           type="button"
           onClick={handleGoogleLogin}
@@ -220,9 +100,7 @@ export default function Login() {
             fontWeight: 500,
           }}
         >
-          {googleLoading
-            ? 'Redirecting to Google...'
-            : 'Continue with Google'}
+          {googleLoading ? 'Redirecting to Google…' : 'Continue with Google'}
         </button>
 
         <p
@@ -232,8 +110,11 @@ export default function Login() {
             fontSize: '14px',
           }}
         >
-          Don&apos;t have an account?{' '}
+          New to Tesseract?{' '}
           <Link to="/signup">Create an account</Link>
+        </p>
+        <p style={{ textAlign: 'center', marginTop: 12, fontSize: 13 }}>
+          Administrator? <Link to="/admin">Sign in here</Link>
         </p>
       </div>
     </div>

@@ -1,6 +1,7 @@
 // Attendance regularization: fix missed check-ins/outs, pending manager approval.
 import { useCallback, useEffect, useState } from 'react'
-import { api } from '../api'
+import { api, localNowIso } from '../api'
+import MentionTextarea from '../components/MentionTextarea'
 import {
   EmptyState, Field, Modal, Spinner, StatusBadge, fmtDate, fmtTime, useToast,
 } from '../components/ui'
@@ -9,9 +10,15 @@ import { PenLine } from '../components/icons'
 function ApplyModal({ onClose, onDone }) {
   const toast = useToast()
   const [form, setForm] = useState({ date: '', check_in: '', check_out: '', reason: '' })
+  const [mentionedIds, setMentionedIds] = useState([])
   const [busy, setBusy] = useState(false)
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }))
-  const today = new Date().toISOString().slice(0, 10)
+  const searchPeople = useCallback((term) => {
+    const params = new URLSearchParams()
+    if (term) params.set('search', term)
+    return api.get(`/regularization/mention-options?${params}`)
+  }, [])
+  const today = localNowIso().slice(0, 10)
 
   const submit = async (e) => {
     e.preventDefault()
@@ -26,6 +33,7 @@ function ApplyModal({ onClose, onDone }) {
         requested_check_in: form.check_in ? `${form.date}T${form.check_in}:00` : null,
         requested_check_out: form.check_out ? `${form.date}T${form.check_out}:00` : null,
         reason: form.reason,
+        mentioned_user_ids: mentionedIds,
       })
       toast('Regularization request submitted for approval', 'success')
       onDone()
@@ -58,10 +66,11 @@ function ApplyModal({ onClose, onDone }) {
                    onChange={(e) => set('check_out', e.target.value)} />
           </Field>
         </div>
-        <Field label="Reason" required>
-          <textarea className="input" required minLength={3} value={form.reason}
-                    onChange={(e) => set('reason', e.target.value)}
-                    placeholder="e.g. Forgot to check out before leaving the office" />
+        <Field label="Reason" required help="Type @ followed by a colleague’s name to mention them.">
+          <MentionTextarea className="input" required minLength={3} rows={4} value={form.reason}
+            searchUsers={searchPeople} mentionedIds={mentionedIds} onMentionsChange={setMentionedIds}
+            onChange={(value) => set('reason', value)}
+            placeholder="e.g. Forgot to check out before leaving the office. Mention someone with @name" />
         </Field>
       </form>
     </Modal>

@@ -8,8 +8,9 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..deps import get_current_user
+from ..attendance_location import attendance_now, get_geofence_settings
 from ..models import (
-    Announcement, Attendance, Holiday, LeaveRequest, RegularizationRequest,
+    Announcement, Attendance, EmployeeRequest, Holiday, LeaveRequest, RegularizationRequest,
     User, WFHRequest,
 )
 from ..serializers import announcement_out, attendance_out, holiday_out, user_brief
@@ -29,11 +30,16 @@ def _pending_counts(db: Session, user: User) -> dict:
             q = q.filter(model.user_id == user.id)
         counts[key] = q.scalar() or 0
     counts["total"] = sum(counts.values())
+    counts["employee_request"] = db.query(func.count(EmployeeRequest.id)).filter(
+        EmployeeRequest.requester_id == user.id,
+        EmployeeRequest.status.in_(["open", "in_progress"]),
+    ).scalar() or 0
+    counts["total"] += counts["employee_request"]
     return counts
 
 
 def _team_snapshot(db: Session, member_ids: list[int]) -> dict:
-    today = date.today()
+    today = attendance_now().date()
     atts = db.query(Attendance).filter(Attendance.user_id.in_(member_ids),
                                        Attendance.date == today).all()
     on_leave = db.query(func.count(LeaveRequest.id)).filter(
@@ -53,7 +59,7 @@ def _team_snapshot(db: Session, member_ids: list[int]) -> dict:
 
 @router.get("")
 def dashboard(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    today = date.today()
+    today = attendance_now().date()
     in_30 = today + timedelta(days=30)
 
     holidays = db.query(Holiday).filter(Holiday.date >= today, Holiday.date <= in_30) \
@@ -80,6 +86,15 @@ def dashboard(user: User = Depends(get_current_user), db: Session = Depends(get_
     payload = {
         "user": user_brief(user),
         "today_attendance": attendance_out(att_today) if att_today else None,
+        "recheck_in_seconds": max(
+            0,
+            min(60, 60 - int((attendance_now() - att_today.check_out).total_seconds())),
+        ) if att_today and att_today.check_out else 0,
+        "location_policy": {
+            "max_gps_accuracy_meters": get_geofence_settings(db)[
+                "max_gps_accuracy_meters"
+            ],
+        },
         "balances": compute_balances(db, user.id),
         "pending_requests": _pending_counts(db, user),
         "upcoming_holidays": [holiday_out(h) for h in holidays],

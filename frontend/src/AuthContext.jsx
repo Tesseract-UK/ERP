@@ -8,8 +8,6 @@ import {
 
 import {
   api,
-  getLegacyToken,
-  setLegacyToken,
   setUnauthorizedHandler,
 } from './api'
 
@@ -23,12 +21,6 @@ export function AuthProvider({ children }) {
   const refresh = useCallback(async () => {
     setProfileLoading(true)
 
-    console.log(
-  'Token before /auth/me:',
-  getLegacyToken() ? 'PRESENT' : 'MISSING'
-)
-console.log('Calling /auth/me')
-
     try {
       const currentUser = await api.get('/auth/me')
 
@@ -40,10 +32,6 @@ console.log('Calling /auth/me')
       // A logged-out visitor may receive 401 from /auth/me.
       setUser(null)
       setAuthError('')
-
-      if (getLegacyToken()) {
-        setLegacyToken(null)
-      }
 
       return null
     } finally {
@@ -67,7 +55,6 @@ console.log('Calling /auth/me')
   const logout = useCallback(async () => {
     setUser(null)
     setAuthError('')
-    setLegacyToken(null)
 
     try {
       await api.post('/auth/logout')
@@ -78,36 +65,12 @@ console.log('Calling /auth/me')
     }
   }, [])
 
-  const login = useCallback(
-    async (credentials) => {
-      setAuthError('')
-
-      try {
-        const result = await api.post('/auth/login', credentials)
-
-        if (!result?.access_token || !result?.user) {
-          throw new Error('Invalid login response from the server.')
-        }
-
-        setLegacyToken(result.access_token)
-        setUser(result.user)
-
-        return result.user
-      } catch (error) {
-        setAuthError(error.message || 'Login failed.')
-        throw error
-      }
-    },
-    [],
-  )
-
   return (
     <AuthContext.Provider
       value={{
         user,
         setUser,
         refresh,
-        login,
         logout,
         authError,
         setAuthError,

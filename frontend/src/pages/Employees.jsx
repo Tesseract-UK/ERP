@@ -1,4 +1,4 @@
-// HR employee management: list, add/edit, activate/deactivate, reset password.
+// HR employee management: list, add/edit, activate/deactivate.
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../api'
@@ -59,7 +59,7 @@ function EmployeeModal({ employeeId, orgData, onClose, onDone }) {
 
   if (loading) return <Modal title="Loading…" onClose={onClose}><Spinner /></Modal>
 
-  const roles = user.role === 'admin' ? ['employee', 'manager', 'hr', 'admin'] : ['employee', 'manager', 'hr']
+  const roles = user.role === 'admin' ? ['employee', 'manager', 'hr', 'admin'] : ['employee']
 
   return (
     <Modal wide title={employeeId ? 'Edit Employee' : 'Add Employee'} onClose={onClose} footer={
@@ -81,16 +81,19 @@ function EmployeeModal({ employeeId, orgData, onClose, onDone }) {
           <Field label="Employee code" help={employeeId ? '' : 'Leave blank to auto-generate'}>
             <input className="input" value={form.employee_code} onChange={(e) => set('employee_code', e.target.value)} />
           </Field>
-          <Field label={employeeId ? 'New password (leave blank to keep)' : 'Initial password'} required={!employeeId}>
-            <PasswordInput minLength={8} required={!employeeId}
-                   autoComplete="new-password" value={form.password} onChange={(e) => set('password', e.target.value)} />
-          </Field>
+          {!employeeId && form.role === 'admin' && (
+            <Field label="Admin password" required help="Employees, Managers, and HR sign in with Google.">
+              <PasswordInput minLength={8} required autoComplete="new-password"
+                     value={form.password} onChange={(e) => set('password', e.target.value)} />
+            </Field>
+          )}
         </div>
         <div className="form-row">
           <Field label="Role" required>
-            <select className="input" value={form.role} onChange={(e) => set('role', e.target.value)}>
+            <select className="input" value={form.role} disabled={!!employeeId} onChange={(e) => set('role', e.target.value)}>
               {roles.map((r) => <option key={r} value={r}>{titleCase(r)}</option>)}
             </select>
+            {employeeId && <div className="help-text">Use the employee list’s Change Role action. Admin assigns HR; HR may promote Employees to Manager.</div>}
           </Field>
           <Field label="Reporting manager">
             <select className="input" value={form.manager_id} onChange={(e) => set('manager_id', e.target.value)}>
@@ -176,6 +179,51 @@ function EmployeeModal({ employeeId, orgData, onClose, onDone }) {
   )
 }
 
+function ChangeRoleModal({ employee, user, onClose, onDone }) {
+  const toast = useToast()
+  const isAdmin = user.role === 'admin'
+  const options = isAdmin
+    ? ['employee', 'manager', 'hr', 'admin']
+    : employee.role === 'employee' ? ['manager'] : []
+  const [role, setRole] = useState(isAdmin ? employee.role : (options[0] || employee.role))
+  const [busy, setBusy] = useState(false)
+
+  const submit = async () => {
+    setBusy(true)
+    try {
+      const result = await api.post(`/hr/employees/${employee.id}/role`, { role })
+      toast(result.message || 'Role updated', 'success')
+      onDone()
+    } catch (err) {
+      toast(err.message, 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Modal title={`Change role — ${employee.full_name}`} onClose={onClose} footer={
+      <>
+        <button className="btn secondary" onClick={onClose} disabled={busy}>Cancel</button>
+        <button className="btn" onClick={submit} disabled={busy || !options.length || role === employee.role}>
+          {busy ? 'Saving…' : 'Change Role'}
+        </button>
+      </>
+    }>
+      <Field label="New role" required>
+        <select className="input" value={role} onChange={(e) => setRole(e.target.value)} disabled={busy || !options.length}>
+          {options.map((option) => <option key={option} value={option}>{titleCase(option)}</option>)}
+        </select>
+      </Field>
+      <p className="help-text">
+        {isAdmin
+          ? 'Admin may assign Employee, Manager, HR, or Admin. The employee will be signed out everywhere so the new permissions apply on next sign-in.'
+          : 'HR may promote an Employee to Manager. Only an Admin can assign HR or Admin access.'}
+      </p>
+    </Modal>
+  )
+}
+
 function ResetPasswordModal({ employee, onClose }) {
   const toast = useToast()
   const [pw, setPw] = useState('')
@@ -185,7 +233,7 @@ function ResetPasswordModal({ employee, onClose }) {
     setBusy(true)
     try {
       await api.post(`/hr/employees/${employee.id}/reset-password`, { new_password: pw })
-      toast(`Password reset for ${employee.full_name}`, 'success')
+      toast(`Admin password reset for ${employee.full_name}`, 'success')
       onClose()
     } catch (err) {
       toast(err.message, 'error')
@@ -194,14 +242,14 @@ function ResetPasswordModal({ employee, onClose }) {
     }
   }
   return (
-    <Modal title={`Reset password — ${employee.full_name}`} onClose={onClose} footer={
+    <Modal title={`Reset Admin password — ${employee.full_name}`} onClose={onClose} footer={
       <>
         <button className="btn secondary" onClick={onClose}>Cancel</button>
-        <button className="btn" form="pw-form" disabled={busy}>{busy ? 'Resetting…' : 'Reset Password'}</button>
+        <button className="btn" form="pw-form" disabled={busy}>{busy ? 'Resetting…' : 'Reset Admin Password'}</button>
       </>
     }>
       <form id="pw-form" onSubmit={submit}>
-        <Field label="New password" required help="At least 8 characters. Share it with the employee securely.">
+        <Field label="New Admin password" required help="At least 8 characters.">
           <PasswordInput required minLength={8} value={pw}
                  autoComplete="new-password" onChange={(e) => setPw(e.target.value)} />
         </Field>
@@ -216,9 +264,12 @@ export default function Employees() {
   const [data, setData] = useState(null)
   const [orgData, setOrgData] = useState(null)
   const [search, setSearch] = useState('')
+  const [departmentId, setDepartmentId] = useState('')
+  const [managerId, setManagerId] = useState('')
+  const [role, setRole] = useState('')
   const [includeInactive, setIncludeInactive] = useState(false)
   const [page, setPage] = useState(1)
-  const [modal, setModal] = useState(null) // {type:'edit'|'new'|'reset'|'deactivate', ...}
+  const [modal, setModal] = useState(null) // {type, employee}
   const [busy, setBusy] = useState(false)
 
   useEffect(() => { api.get('/admin/org-data').then(setOrgData).catch(() => {}) }, [])
@@ -226,23 +277,13 @@ export default function Employees() {
   const load = useCallback(() => {
     const params = new URLSearchParams({ page, page_size: 25 })
     if (search) params.append('search', search)
+    if (departmentId) params.append('department_id', departmentId)
+    if (managerId) params.append('manager_id', managerId)
+    if (role) params.append('role', role)
     if (includeInactive) params.append('include_inactive', 'true')
     api.get(`/hr/employees?${params}`).then(setData).catch((e) => toast(e.message, 'error'))
-  }, [page, search, includeInactive, toast])
+  }, [page, search, departmentId, managerId, role, includeInactive, toast])
   useEffect(load, [load])
-
-  const allowPasswordChange = async (emp) => {
-    setBusy(true)
-    try {
-      const res = await api.post(`/hr/employees/${emp.id}/allow-password-change`)
-      toast(res.message, 'success')
-      setModal(null)
-    } catch (err) {
-      toast(err.message, 'error')
-    } finally {
-      setBusy(false)
-    }
-  }
 
   const toggleActive = async (emp) => {
     setBusy(true)
@@ -268,6 +309,22 @@ export default function Employees() {
       <div className="card pad toolbar">
         <input className="input" style={{ maxWidth: 280 }} placeholder="Search name, email or code…"
                value={search} onChange={(e) => { setSearch(e.target.value); setPage(1) }} />
+        <select className="input" style={{ maxWidth: 210 }} value={departmentId}
+                onChange={(e) => { setDepartmentId(e.target.value); setPage(1) }}>
+          <option value="">All departments</option>
+          {(orgData?.departments || []).map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+        </select>
+        <select className="input" style={{ maxWidth: 210 }} value={managerId}
+                onChange={(e) => { setManagerId(e.target.value); setPage(1) }}>
+          <option value="">All managers</option>
+          {(orgData?.managers || []).map((m) => <option key={m.id} value={m.id}>{m.full_name}</option>)}
+        </select>
+        <select className="input" style={{ maxWidth: 170 }} value={role}
+                onChange={(e) => { setRole(e.target.value); setPage(1) }} aria-label="Filter by role">
+          <option value="">All roles</option>
+          {['employee', 'manager', 'hr', 'admin'].map((value) =>
+            <option key={value} value={value}>{titleCase(value)}</option>)}
+        </select>
         <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 13 }}>
           <input type="checkbox" checked={includeInactive}
                  onChange={(e) => { setIncludeInactive(e.target.checked); setPage(1) }} />
@@ -295,14 +352,21 @@ export default function Employees() {
                                         : <span className="badge danger">Inactive</span>}</td>
                       <td>
                         <div className="toolbar" style={{ gap: 6 }}>
-                          <button className="btn secondary sm" onClick={() => setModal({ type: 'edit', id: e.id })}>Edit</button>
-                          <button className="btn ghost sm" onClick={() => setModal({ type: 'reset', emp: e })}>Reset PW</button>
-                          {user.role === 'admin' &&
-                            <button className="btn ghost sm" onClick={() => setModal({ type: 'allow-pw', emp: e })}>Allow PW Change</button>}
-                          <button className={`btn ghost sm`} style={{ color: e.is_active ? 'var(--danger)' : 'var(--ok)' }}
-                                  onClick={() => setModal({ type: 'toggle', emp: e })}>
-                            {e.is_active ? 'Deactivate' : 'Activate'}
-                          </button>
+                          {(user.role === 'admin' || !['hr', 'admin'].includes(e.role)) && (
+                            <>
+                              <button className="btn secondary sm" onClick={() => setModal({ type: 'edit', id: e.id })}>Edit</button>
+                              {user.role === 'admin' && e.role === 'admin' && e.id !== user.id &&
+                                <button className="btn ghost sm" onClick={() => setModal({ type: 'reset', emp: e })}>Reset Admin PW</button>}
+                              <button className="btn ghost sm" style={{ color: e.is_active ? 'var(--danger)' : 'var(--ok)' }}
+                                      onClick={() => setModal({ type: 'toggle', emp: e })}>
+                                {e.is_active ? 'Deactivate' : 'Activate'}
+                              </button>
+                            </>
+                          )}
+                          {user.role === 'admin' && e.id !== user.id &&
+                            <button className="btn ghost sm" onClick={() => setModal({ type: 'role', emp: e })}>Change Role</button>}
+                          {user.role === 'hr' && e.role === 'employee' &&
+                            <button className="btn ghost sm" onClick={() => setModal({ type: 'role', emp: e })}>Promote</button>}
                         </div>
                       </td>
                     </tr>
@@ -320,14 +384,11 @@ export default function Employees() {
       {modal?.type === 'edit' && orgData &&
         <EmployeeModal employeeId={modal.id} orgData={orgData} onClose={() => setModal(null)}
                        onDone={() => { setModal(null); load() }} />}
+      {modal?.type === 'role' &&
+        <ChangeRoleModal employee={modal.emp} user={user} onClose={() => setModal(null)}
+                         onDone={() => { setModal(null); load() }} />}
       {modal?.type === 'reset' &&
         <ResetPasswordModal employee={modal.emp} onClose={() => setModal(null)} />}
-      {modal?.type === 'allow-pw' &&
-        <ConfirmDialog busy={busy}
-          title={`Allow password change — ${modal.emp.full_name}`}
-          message="The employee will be required to set a new password at their next sign-in. Their current password keeps working until then."
-          confirmLabel="Allow Change"
-          onConfirm={() => allowPasswordChange(modal.emp)} onClose={() => setModal(null)} />}
       {modal?.type === 'toggle' &&
         <ConfirmDialog danger={modal.emp.is_active} busy={busy}
           title={`${modal.emp.is_active ? 'Deactivate' : 'Reactivate'} ${modal.emp.full_name}`}

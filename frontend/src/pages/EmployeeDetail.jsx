@@ -4,15 +4,133 @@
 // to them).
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { api } from '../api'
+import { API_BASE, api } from '../api'
+import { useAuth } from '../AuthContext'
 import MonthCalendar, { MonthNav } from '../components/MonthCalendar'
 import {
-  EmptyState, Field, Modal, NumberInput, Spinner, StatusBadge, fmtDate, titleCase, useToast,
+  EmptyState, Field, Modal, NumberInput, Spinner, StatusBadge, fmtDate, fmtDateTime, fmtTime, titleCase, useToast,
 } from '../components/ui'
-import { CalendarDays, Users } from '../components/icons'
+import { CalendarDays, IdCard, Users } from '../components/icons'
 
 const KIND_LABEL = { leave: 'Leave', wfh: 'Work From Home', regularization: 'Regularization' }
 const ALLOCATION_TYPES = ['casual', 'sick', 'earned', 'maternity', 'paternity', 'optional_holiday', 'wfh']
+
+function EmployeeDocumentsCard({ employeeId }) {
+  const toast = useToast()
+  const [documents, setDocuments] = useState(null)
+  const [name, setName] = useState('')
+  const [file, setFile] = useState(null)
+  const [busy, setBusy] = useState(false)
+
+  const load = useCallback(() => {
+    api.get(`/hr/employees/${employeeId}/documents`)
+      .then(setDocuments)
+      .catch((error) => toast(error.message, 'error'))
+  }, [employeeId, toast])
+  useEffect(load, [load])
+
+  const upload = async (event) => {
+    event.preventDefault()
+    if (!file) return
+    const form = event.currentTarget
+    const formData = new FormData()
+    formData.append('name', name)
+    formData.append('file', file)
+    setBusy(true)
+    try {
+      await api.postForm(`/hr/employees/${employeeId}/documents`, formData)
+      toast('Employee document uploaded', 'success')
+      setName('')
+      setFile(null)
+      form.reset()
+      load()
+    } catch (error) {
+      toast(error.message, 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="card">
+      <div className="card-head"><h3>Employee Documents</h3></div>
+      <div className="card-body">
+        <form className="toolbar" onSubmit={upload} style={{ alignItems: 'end', marginBottom: 14 }}>
+          <Field label="Document name" required>
+            <input className="input" required maxLength={150} value={name} onChange={(event) => setName(event.target.value)} />
+          </Field>
+          <Field label="File (PDF, image, or Office document)" required>
+            <input className="input" required type="file" accept=".pdf,.png,.jpg,.jpeg,.doc,.docx"
+              onChange={(event) => setFile(event.target.files?.[0] || null)} />
+          </Field>
+          <button className="btn secondary" disabled={busy || !file}>{busy ? 'Uploading…' : 'Upload'}</button>
+        </form>
+        {documents === null ? <Spinner /> : documents.length === 0
+          ? <EmptyState icon={IdCard} title="No employee documents" />
+          : <div className="table-wrap"><table className="table">
+            <thead><tr><th>Document</th><th>Uploaded</th><th>File</th></tr></thead>
+            <tbody>{documents.map((document) => {
+              const path = document.file_path.split('/').map(encodeURIComponent).join('/')
+              return <tr key={document.id}>
+                <td>{document.name}</td>
+                <td>{fmtDate(document.created_at)}</td>
+                <td><a href={`${API_BASE}/files/${path}`} target="_blank" rel="noreferrer">Open securely</a></td>
+              </tr>
+            })}</tbody>
+          </table></div>}
+      </div>
+    </div>
+  )
+}
+
+function AttendanceCorrectionCard({ employee, onSaved }) {
+  const toast = useToast()
+  const yesterday = new Date()
+  yesterday.setDate(yesterday.getDate() - 1)
+  const maxDate = `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, '0')}-${String(yesterday.getDate()).padStart(2, '0')}`
+  const [date, setDate] = useState('')
+  const [status, setStatus] = useState('absent')
+  const [reason, setReason] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const submit = async (event) => {
+    event.preventDefault()
+    setBusy(true)
+    try {
+      const result = await api.put(`/hr/employees/${employee.id}/attendance/${date}/correction`, { status, reason })
+      toast(`Attendance marked ${titleCase(status)} for ${fmtDate(date)}`, 'success')
+      setReason('')
+      onSaved(result)
+    } catch (error) {
+      toast(error.message, 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="card">
+      <div className="card-head"><h3>Correct Attendance</h3></div>
+      <form className="card-body" onSubmit={submit}>
+        <div className="form-row">
+          <Field label="Completed date" required>
+            <input className="input" type="date" required max={maxDate} value={date} onChange={(event) => setDate(event.target.value)} />
+          </Field>
+          <Field label="Correct status" required>
+            <select className="input" value={status} onChange={(event) => setStatus(event.target.value)}>
+              <option value="absent">Absent</option><option value="present">Present</option>
+            </select>
+          </Field>
+        </div>
+        <Field label="Reason" required help="Required for the audit trail. Existing punch and location evidence is not changed.">
+          <textarea className="input" required minLength={10} maxLength={1000} value={reason}
+            onChange={(event) => setReason(event.target.value)} placeholder="Explain why this attendance status needs correction…" />
+        </Field>
+        <button className="btn" disabled={busy || !date}>{busy ? 'Saving…' : 'Save Attendance Correction'}</button>
+      </form>
+    </div>
+  )
+}
 
 function AllocationsCard({ employeeId }) {
   const toast = useToast()
@@ -118,6 +236,7 @@ function DecisionModal({ item, decision, onClose, onDone }) {
       </>
     }>
       <p style={{ marginBottom: 12, color: 'var(--ink-2)' }}>Reason: “{item.reason}”</p>
+      {item.document_path && <p style={{ marginBottom: 12 }}><a href={`${API_BASE}/files/${item.document_path.split(/[\\/]/).map(encodeURIComponent).join('/')}`} target="_blank" rel="noreferrer">Open supporting document</a></p>}
       <Field label="Comment (optional)" help="Stored with the request for future reference">
         <textarea className="input" value={comment} onChange={(e) => setComment(e.target.value)}
                   placeholder="Add a note for the employee…" />
@@ -174,6 +293,7 @@ function AddReportModal({ managerId, onClose, onDone }) {
 
 export default function EmployeeDetail() {
   const { id } = useParams()
+  const { user } = useAuth()
   const toast = useToast()
   const now = new Date()
 
@@ -185,6 +305,7 @@ export default function EmployeeDetail() {
   const [calData, setCalData] = useState(null)
   const [managerPick, setManagerPick] = useState('')
   const [decision, setDecision] = useState(null)
+  const [selectedRequest, setSelectedRequest] = useState(null)
   const [showAddReport, setShowAddReport] = useState(false)
 
   const loadEmp = useCallback(() => {
@@ -294,6 +415,17 @@ export default function EmployeeDetail() {
 
       <AllocationsCard employeeId={Number(id)} />
 
+      <EmployeeDocumentsCard employeeId={Number(id)} />
+
+      {user.role === 'admin' && <AttendanceCorrectionCard employee={emp} onSaved={(record) => {
+        setCalData((current) => current ? {
+          ...current,
+          days: current.days.map((day) => day.date === record.date
+            ? { ...day, status: record.status, detail: record }
+            : day),
+        } : current)
+      }} />}
+
       <div className="card">
         <div className="card-head">
           <h3>Attendance Calendar</h3>
@@ -323,12 +455,13 @@ export default function EmployeeDetail() {
                       <td><StatusBadge status={r.status} />
                         {r.approver_comment && <div className="help-text" title={r.approver_comment}>“{r.approver_comment}”</div>}</td>
                       <td>{r.approver_name || '—'}</td>
-                      <td>{r.status === 'pending' && (
-                        <div className="toolbar" style={{ gap: 6 }}>
+                      <td><div className="toolbar" style={{ gap: 6 }}>
+                          <button className="btn ghost sm" onClick={() => setSelectedRequest(r)}>View</button>
+                          {r.status === 'pending' && <>
                           <button className="btn success sm" onClick={() => setDecision({ item: r, decision: 'approve' })}>Approve</button>
                           <button className="btn danger sm" onClick={() => setDecision({ item: r, decision: 'reject' })}>Reject</button>
-                        </div>
-                      )}</td>
+                          </>}
+                        </div></td>
                     </tr>
                   )
                 })}
@@ -346,6 +479,29 @@ export default function EmployeeDetail() {
                        onClose={() => setDecision(null)}
                        onDone={() => { setDecision(null); loadRequests() }} />
       )}
+      {selectedRequest && <Modal title="Request details" onClose={() => setSelectedRequest(null)}>
+        <p><strong>Employee:</strong> {emp.full_name} ({emp.employee_code})</p>
+        <p><strong>Type:</strong> {selectedRequest.kind === 'leave' ? `${titleCase(selectedRequest.leave_type)} Leave` : KIND_LABEL[selectedRequest.kind]}</p>
+        <p><strong>Date:</strong> {selectedRequest.start_date
+          ? `${fmtDate(selectedRequest.start_date)} → ${fmtDate(selectedRequest.end_date)}`
+          : fmtDate(selectedRequest.date)}</p>
+        {selectedRequest.days != null && <p><strong>Working days:</strong> {selectedRequest.days}</p>}
+        {selectedRequest.requested_check_in && <p><strong>Corrected check-in:</strong> {fmtTime(selectedRequest.requested_check_in)}</p>}
+        {selectedRequest.requested_check_out && <p><strong>Corrected check-out:</strong> {fmtTime(selectedRequest.requested_check_out)}</p>}
+        <p><strong>Reason:</strong> {selectedRequest.reason}</p>
+        <p><strong>Status:</strong> {titleCase(selectedRequest.status)} · {titleCase(selectedRequest.approval_stage)}</p>
+        <p><strong>Submitted:</strong> {fmtDateTime(selectedRequest.created_at)}{selectedRequest.decided_at ? ` · Decided ${fmtDateTime(selectedRequest.decided_at)}` : ''}</p>
+        <p><strong>Manager decision:</strong> {selectedRequest.manager_decided_at
+          ? `${selectedRequest.manager_approver_name || 'Manager'} ${selectedRequest.manager_comment ? `· ${selectedRequest.manager_comment} ` : ''}· ${fmtDateTime(selectedRequest.manager_decided_at)}`
+          : 'Pending / not required'}</p>
+        <p><strong>HR decision:</strong> {selectedRequest.hr_decided_at
+          ? `${selectedRequest.hr_comment ? `${selectedRequest.hr_comment} · ` : ''}${fmtDateTime(selectedRequest.hr_decided_at)}`
+          : 'Pending / not required'}</p>
+        {selectedRequest.manager_comment && <p><strong>Manager comment:</strong> {selectedRequest.manager_comment}</p>}
+        {selectedRequest.hr_comment && <p><strong>HR comment:</strong> {selectedRequest.hr_comment}</p>}
+        {selectedRequest.approver_comment && <p><strong>Decision note:</strong> {selectedRequest.approver_comment}</p>}
+        {selectedRequest.document_path && <p style={{ marginTop: 12 }}><a href={`${API_BASE}/files/${selectedRequest.document_path.split(/[\\/]/).map(encodeURIComponent).join('/')}`} target="_blank" rel="noreferrer">Open supporting document</a></p>}
+      </Modal>}
     </div>
   )
 }

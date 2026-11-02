@@ -1,8 +1,9 @@
 // Shared Leave / WFH application forms — used by the Leaves and WFH pages,
 // and by the Attendance calendar's per-date quick-apply flow.
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { api } from '../api'
 import { Field, titleCase, useToast } from './ui'
+import MentionTextarea from './MentionTextarea'
 
 const LEAVE_TYPES = ['casual', 'sick', 'earned', 'unpaid', 'maternity', 'paternity', 'optional_holiday']
 
@@ -20,8 +21,12 @@ export function LeaveApplyForm({ initialStart = '', initialEnd = '', onDone, onC
     leave_type: 'casual', start_date: initialStart, end_date: initialEnd || initialStart, reason: '',
   })
   const [file, setFile] = useState(null)
+  const [mentionedIds, setMentionedIds] = useState([])
   const [busy, setBusy] = useState(false)
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }))
+  const searchPeople = useCallback((term) => api.get(
+    `/regularization/mention-options?${new URLSearchParams(term ? { search: term } : {})}`,
+  ), [])
 
   useEffect(() => { api.get('/leaves/balance').then(setBalances).catch(() => {}) }, [])
 
@@ -31,6 +36,7 @@ export function LeaveApplyForm({ initialStart = '', initialEnd = '', onDone, onC
     try {
       const fd = new FormData()
       Object.entries(form).forEach(([k, v]) => fd.append(k, v))
+      fd.append('mentioned_user_ids', JSON.stringify(mentionedIds))
       if (file) fd.append('document', file)
       await api.postForm('/leaves', fd)
       toast('Leave request submitted for approval', 'success')
@@ -61,9 +67,10 @@ export function LeaveApplyForm({ initialStart = '', initialEnd = '', onDone, onC
         </Field>
       </div>
       <Field label="Reason" required>
-        <textarea className="input" required minLength={3} value={form.reason}
-                  onChange={(e) => set('reason', e.target.value)}
-                  placeholder="Briefly describe the reason for your leave" />
+        <MentionTextarea className="input" required minLength={3} rows={3} value={form.reason}
+          searchUsers={searchPeople} mentionedIds={mentionedIds} onMentionsChange={setMentionedIds}
+          onChange={(value) => set('reason', value)}
+          placeholder="Briefly describe the reason for your leave. Type @ to tag a colleague." />
       </Field>
       <Field label="Supporting document (optional)" help="PDF, image or Word document up to 5 MB">
         <input className="input" type="file" accept=".pdf,.png,.jpg,.jpeg,.doc,.docx"
@@ -78,8 +85,12 @@ export function WfhApplyForm({ initialStart = '', initialEnd = '', onDone, onCan
   const toast = useToast()
   const [form, setForm] = useState({ start_date: initialStart, end_date: initialEnd || initialStart, reason: '' })
   const [file, setFile] = useState(null)
+  const [mentionedIds, setMentionedIds] = useState([])
   const [busy, setBusy] = useState(false)
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }))
+  const searchPeople = useCallback((term) => api.get(
+    `/regularization/mention-options?${new URLSearchParams(term ? { search: term } : {})}`,
+  ), [])
 
   const submit = async (e) => {
     e.preventDefault()
@@ -100,6 +111,7 @@ export function WfhApplyForm({ initialStart = '', initialEnd = '', onDone, onCan
         const fd = new FormData()
         fd.append('date', d)
         fd.append('reason', form.reason)
+        fd.append('mentioned_user_ids', JSON.stringify(mentionedIds))
         if (file) fd.append('document', file)
         try {
           await api.postForm('/wfh', fd)
@@ -135,9 +147,10 @@ export function WfhApplyForm({ initialStart = '', initialEnd = '', onDone, onCan
         </Field>
       </div>
       <Field label="Reason" required>
-        <textarea className="input" required minLength={3} value={form.reason}
-                  onChange={(e) => set('reason', e.target.value)}
-                  placeholder="Why do you need to work from home?" />
+        <MentionTextarea className="input" required minLength={3} rows={3} value={form.reason}
+          searchUsers={searchPeople} mentionedIds={mentionedIds} onMentionsChange={setMentionedIds}
+          onChange={(value) => set('reason', value)}
+          placeholder="Why do you need to work from home? Type @ to tag a colleague." />
       </Field>
       <Field label="Supporting document (optional)">
         <input className="input" type="file" accept=".pdf,.png,.jpg,.jpeg,.doc,.docx"

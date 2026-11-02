@@ -4,7 +4,7 @@
 // application for that date, and shows any existing request for it.
 import { useState } from 'react'
 import {
-  Modal, StatusBadge, fmtHours, fmtTime, titleCase,
+  Modal, StatusBadge, fmtDateTime, fmtHours, fmtTime, titleCase,
 } from './ui'
 import { ChevronLeft, ChevronRight } from './icons'
 import { LeaveApplyForm, WfhApplyForm } from './RequestForms'
@@ -70,10 +70,20 @@ function DayDetail({ cell, selfService, requests, onChanged, onClose }) {
         <table className="table"><tbody>
           <tr><td>Login time</td><td className="num"><strong>{fmtTime(d.check_in)}</strong></td></tr>
           <tr><td>Logout time</td><td className="num"><strong>{fmtTime(d.check_out)}</strong></td></tr>
+          {d.latitude != null && <tr><td>Check-in location</td><td className="num">{d.latitude.toFixed(6)}, {d.longitude.toFixed(6)}</td></tr>}
+          {d.distance_from_office_meters != null && <tr><td>Check-in distance</td><td className="num">{Math.round(d.distance_from_office_meters)} m from office</td></tr>}
+          {d.checkout_latitude != null && <tr><td>Check-out location</td><td className="num">{d.checkout_latitude.toFixed(6)}, {d.checkout_longitude.toFixed(6)}</td></tr>}
+          {d.checkout_distance_from_office_meters != null && <tr><td>Check-out distance</td><td className="num">{Math.round(d.checkout_distance_from_office_meters)} m from office</td></tr>}
           <tr><td>Working hours</td><td className="num"><strong>{fmtHours(d.work_hours)}</strong></td></tr>
           <tr><td>Break duration</td><td className="num"><strong>{Math.round(d.break_minutes)}m ({d.breaks.length} break{d.breaks.length === 1 ? '' : 's'})</strong></td></tr>
           <tr><td>Overtime</td><td className="num"><strong>{d.overtime_hours > 0 ? fmtHours(d.overtime_hours) : '—'}</strong></td></tr>
           <tr><td>Late arrival</td><td className="num"><strong>{d.is_late ? 'Yes' : 'No'}</strong></td></tr>
+          {d.status_override && <>
+            <tr><td>Admin correction</td><td className="num"><strong>{titleCase(d.status_override)}</strong></td></tr>
+            {d.status_override_by && <tr><td>Changed by</td><td className="num">{d.status_override_by}</td></tr>}
+            {d.status_override_at && <tr><td>Changed at</td><td className="num">{fmtDateTime(d.status_override_at)}</td></tr>}
+            {d.status_override_reason && <tr><td>Reason</td><td className="num">{d.status_override_reason}</td></tr>}
+          </>}
           {d.notes && <tr><td>Notes</td><td className="num">{d.notes}</td></tr>}
         </tbody></table>
       ) : (
