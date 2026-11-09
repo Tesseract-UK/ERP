@@ -2,7 +2,7 @@
 // and by the Attendance calendar's per-date quick-apply flow.
 import { useEffect, useState } from 'react'
 import { api } from '../api'
-import { Field, titleCase, useToast } from './ui'
+import { Field, localDateStr, titleCase, useToast } from './ui'
 
 const LEAVE_TYPES = ['casual', 'sick', 'earned', 'unpaid', 'maternity', 'paternity', 'optional_holiday']
 
@@ -90,7 +90,7 @@ export function WfhApplyForm({ initialStart = '', initialEnd = '', onDone, onCan
       if (end < start) throw new Error('To date must be on or after the from date')
       const dates = []
       for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-        if (d.getDay() !== 0 && d.getDay() !== 6) dates.push(d.toISOString().slice(0, 10))
+        if (d.getDay() !== 0 && d.getDay() !== 6) dates.push(localDateStr(d))
       }
       if (!dates.length) throw new Error('Selected range contains no weekdays')
 

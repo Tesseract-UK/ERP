@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '../api'
 import {
-  EmptyState, Field, Modal, Spinner, StatusBadge, fmtDate, fmtTime, useToast,
+  EmptyState, Field, Modal, Spinner, StatusBadge, fmtDate, fmtTime, localDateStr, useToast,
 } from '../components/ui'
 import { PenLine } from '../components/icons'
 
@@ -11,7 +11,7 @@ function ApplyModal({ onClose, onDone }) {
   const [form, setForm] = useState({ date: '', check_in: '', check_out: '', reason: '' })
   const [busy, setBusy] = useState(false)
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }))
-  const today = new Date().toISOString().slice(0, 10)
+  const today = localDateStr(new Date())
 
   const submit = async (e) => {
     e.preventDefault()

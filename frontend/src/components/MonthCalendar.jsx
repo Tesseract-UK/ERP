@@ -4,7 +4,7 @@
 // application for that date, and shows any existing request for it.
 import { useState } from 'react'
 import {
-  Modal, StatusBadge, fmtHours, fmtTime, titleCase,
+  Modal, StatusBadge, fmtHours, fmtTime, localDateStr, titleCase,
 } from './ui'
 import { ChevronLeft, ChevronRight } from './icons'
 import { LeaveApplyForm, WfhApplyForm } from './RequestForms'
@@ -118,7 +118,7 @@ export default function MonthCalendar({ data, selfService, requests, onChanged }
   const [selected, setSelected] = useState(null)
   if (!data) return null
   const firstDow = new Date(data.year, data.month - 1, 1).getDay()
-  const todayIso = new Date().toISOString().slice(0, 10)
+  const todayIso = localDateStr(new Date())
 
   return (
     <>

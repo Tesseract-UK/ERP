@@ -6,3 +6,6 @@ node_modules/
 dist/
 backend/hrms.db
 backend/uploads/
+
+# Google OAuth client secret downloads
+client_secret_*.json
