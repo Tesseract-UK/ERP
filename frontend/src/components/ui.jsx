@@ -142,6 +142,14 @@ export function ToastProvider({ children }) {
 export const useToast = () => useContext(ToastContext)
 
 // ---- formatting helpers ----
+// YYYY-MM-DD in the browser's local calendar day. NEVER use
+// date.toISOString().slice(0,10) for this — toISOString converts to UTC
+// first, so for any timezone ahead of UTC (e.g. IST, UTC+5:30) a local
+// midnight rolls back to the previous day, silently shifting the date.
+export const localDateStr = (d) => {
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+}
 export const fmtDate = (iso) => iso ? new Date(iso + (iso.length === 10 ? 'T00:00' : '')).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '—'
 export const fmtTime = (iso) => iso ? new Date(iso).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) : '—'
 export const fmtDateTime = (iso) => iso ? `${fmtDate(iso)} ${fmtTime(iso)}` : '—'

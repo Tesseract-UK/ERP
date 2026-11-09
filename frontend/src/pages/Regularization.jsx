@@ -1,9 +1,9 @@
 // Attendance regularization: fix missed check-ins/outs, pending manager approval.
 import { useCallback, useEffect, useState } from 'react'
-import { api, localNowIso } from '../api'
+import { api } from '../api'
 import MentionTextarea from '../components/MentionTextarea'
 import {
-  EmptyState, Field, Modal, Spinner, StatusBadge, fmtDate, fmtTime, useToast,
+  EmptyState, Field, Modal, Spinner, StatusBadge, fmtDate, fmtTime, localDateStr, useToast,
 } from '../components/ui'
 import { PenLine } from '../components/icons'
 
@@ -18,7 +18,7 @@ function ApplyModal({ onClose, onDone }) {
     if (term) params.set('search', term)
     return api.get(`/regularization/mention-options?${params}`)
   }, [])
-  const today = localNowIso().slice(0, 10)
+  const today = localDateStr(new Date())
 
   const submit = async (e) => {
     e.preventDefault()

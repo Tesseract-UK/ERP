@@ -7,3 +7,6 @@ dist/
 backend/hrms.db
 backend/*.db
 backend/uploads/
+
+# Google OAuth client secret downloads
+client_secret_*.json
