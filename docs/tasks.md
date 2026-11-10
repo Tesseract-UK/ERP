@@ -10,10 +10,10 @@
 - [x] Assign managers to existing users without one — local DB done 2026-11-10 (dev2@, unnayan.m@ → Admin). Production still needs the same check after deploy.
 - [ ] Click-through UI test in a browser (automated browser was unavailable; API flow verified).
 - [ ] Push `main` and deploy backend + frontend (frontend deploys manually — see CONTEXT.md).
+- [ ] After deploy: HR must enter leave/WFH allocations for every existing employee (balances are 0 until set).
 - [ ] Delete stray `client_secret_*.json` from the repo root (gitignored).
 
 ## Done (2026-11-10)
 - Manager-gated onboarding, manager-only approvals + admin override, conversations with
   @-tagging, email layer, company WFH days, combined Leave & WFH screen, reject confirmation,
   uploads removed, Clerk removed, pytest suite.
-- [ ] After deploy: HR must enter leave/WFH allocations for every existing employee (balances are 0 until set).
