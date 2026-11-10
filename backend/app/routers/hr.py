@@ -226,7 +226,7 @@ def correct_employee_attendance(
     attendance = db.query(Attendance).filter(
         Attendance.user_id == employee_id,
         Attendance.date == attendance_date,
-    ).with_for_update().first()
+    ).with_for_update(of=Attendance).first()
     if attendance is None:
         attendance = Attendance(
             user_id=employee_id,

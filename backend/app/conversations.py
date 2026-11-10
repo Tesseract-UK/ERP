@@ -41,7 +41,9 @@ def load_request(db: Session, kind: str, request_id: int, *, for_update: bool = 
     model = KIND_MODELS[kind][0]
     query = db.query(model).filter(model.id == request_id)
     if for_update:
-        query = query.with_for_update()
+        # Lock only this table's row. Postgres rejects FOR UPDATE on the
+        # outer-joined eager loads (user, manager, shift); SQLite ignores it.
+        query = query.with_for_update(of=model)
     record = query.first()
     if record is None:
         raise HTTPException(status_code=404, detail="Request not found")

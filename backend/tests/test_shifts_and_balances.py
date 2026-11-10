@@ -146,3 +146,18 @@ def test_manager_who_is_admin_listed_once(org):
     rows = org.client(org.hr).get("/requests/recipients").json()
     admin_rows = [p for p in rows if p["id"] == org.admin.id]
     assert len(admin_rows) == 1 and admin_rows[0]["role"] == "manager"
+
+
+# ---------- row locks (Postgres rejects FOR UPDATE on outer-joined eager loads) ----------
+
+def test_admin_attendance_correction_twice(org):
+    admin = org.client(org.admin)
+    day = date.today() - timedelta(days=7)
+    while day.weekday() >= 5:
+        day -= timedelta(days=1)
+    url = f"/hr/employees/{org.alice.id}/attendance/{day.isoformat()}/correction"
+    r = admin.put(url, json={"status": "absent", "reason": "No show, confirmed by manager"})
+    assert r.status_code == 200, r.text
+    # Second correction locks the now-existing row.
+    r = admin.put(url, json={"status": "present", "reason": "Was on client site all day"})
+    assert r.status_code == 200, r.text

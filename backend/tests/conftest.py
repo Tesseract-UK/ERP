@@ -1,4 +1,4 @@
-"""Test harness: a throwaway SQLite database and Bearer-token clients per role.
+"""Test harness: a throwaway database (SQLite, or TEST_DATABASE_URL) and Bearer-token clients per role.
 
 Environment must be set before the app is imported, because config and the
 engine are created at import time.
@@ -9,7 +9,9 @@ import tempfile
 from datetime import date, timedelta
 
 _DB_DIR = tempfile.mkdtemp(prefix="hrms-test-")
-os.environ["DATABASE_URL"] = f"sqlite:///{_DB_DIR}/test.db"
+# Default: throwaway SQLite. Set TEST_DATABASE_URL to run against a scratch
+# Postgres (the suite DROPS ALL TABLES there — never point it at real data).
+os.environ["DATABASE_URL"] = os.getenv("TEST_DATABASE_URL", f"sqlite:///{_DB_DIR}/test.db")
 os.environ["APP_ENV"] = "test"
 os.environ["EMAIL_BACKEND"] = "console"
 os.environ["SECRET_KEY"] = "test-secret-key-that-is-long-enough-123456"

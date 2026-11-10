@@ -66,3 +66,8 @@ Tagged people can read the full thread (including the reason). Admins see all.
 **Decision:** Late = after own shift start + `LATE_GRACE_MINUTES` (30); no shift → old `LATE_ARRIVAL_TIME`. Shifts with end <= start are overnight: the record belongs to the start date; punches until 20h after check-in close it. Standard shifts are created at startup, matched on times.
 **Why:** New 13:30/16:30/17:30 shifts would otherwise be "late" daily and fail checkout after midnight.
 **Status:** active
+
+## D-010: Supabase Postgres via the session pooler; first Admin from env
+**Date:** 2026-11-10
+**Decision:** Render connects to Supabase's Session pooler (IPv4) with sslmode=require. A fresh DB gets its first Admin from INITIAL_ADMIN_* at startup (only while no Admin exists). Demo seed is dev-only.
+**Status:** active

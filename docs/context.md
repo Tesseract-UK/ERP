@@ -33,3 +33,10 @@ before any push). Browser automation unavailable, so UI was build-checked but no
 - Leave balances now 0 until HR enters them; HR cannot edit their own (D-008). Fixed NumberInput not reflecting programmatic changes.
 - User thought "HR Mitaly" was HR, but role was still employee (role field locked in Edit form). Promoted via admin API; added "Change role…" button inside the Edit form.
 - Tests: 24 passing (9 new).
+
+## 2026-11-10 (evening) — production readiness for Supabase + Render + Vercel
+- User chose Supabase (DB), Render (API), Vercel (web).
+- Ran the suite against Postgres 15 in Docker: 2 failures SQLite hid — `SELECT … FOR UPDATE` with joined eager loads is rejected by Postgres. Would have broken every approve/reject and admin attendance correction in production. Fixed with `with_for_update(of=Model)`; added a regression test (verified it fails without the fix).
+- Empty DB had no way to get an Admin (seed creates demo users with a known password; Render free has no shell). Added `app/bootstrap.py`: INITIAL_ADMIN_* env creates the first Admin once; also ensures the leave-policy template.
+- render.yaml no longer provisions a Render DB; DATABASE_URL is a dashboard secret (Supabase session pooler).
+- Tests: 25 pass on SQLite and Postgres. `TEST_DATABASE_URL` lets the suite run on a scratch Postgres.

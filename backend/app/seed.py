@@ -11,10 +11,7 @@ from .models import (
 )
 from .security import hash_password
 
-DEFAULT_POLICIES = {
-    "casual": 12, "sick": 10, "earned": 15, "unpaid": 0, "maternity": 182,
-    "paternity": 15, "optional_holiday": 2, "wfh": 24,
-}
+from .bootstrap import DEFAULT_POLICIES  # noqa: E402
 
 HOLIDAYS_2026 = [
     (date(2026, 1, 1), "New Year's Day", "company"),

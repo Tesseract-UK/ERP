@@ -259,6 +259,10 @@ def _ensure_standard_shifts():
 
 _ensure_standard_shifts()
 
+from .bootstrap import bootstrap  # noqa: E402
+
+bootstrap()
+
 for router in (
     auth.router,
     dashboard.router,
