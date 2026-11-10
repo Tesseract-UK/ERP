@@ -7,7 +7,7 @@
 - [ ] Google Console: add `https://erp-gksp.onrender.com/auth/google/callback` as a redirect URI.
 - [ ] Render env: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`,
       `FRONTEND_URL`, `CORS_ORIGINS`; remove old Clerk vars.
-- [ ] Assign managers to existing users without one (they are now "onboarding pending").
+- [x] Assign managers to existing users without one — local DB done 2026-11-10 (dev2@, unnayan.m@ → Admin). Production still needs the same check after deploy.
 - [ ] Click-through UI test in a browser (automated browser was unavailable; API flow verified).
 - [ ] Push `main` and deploy backend + frontend (frontend deploys manually — see CONTEXT.md).
 - [ ] Delete stray `client_secret_*.json` from the repo root (gitignored).

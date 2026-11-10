@@ -30,11 +30,15 @@ ACTIVE_STATUSES = {"open", "in_progress"}
 
 
 def _allowed_contacts(db: Session, requester: User) -> list[dict]:
+    # One entry per person. A manager who is also an Admin (allowed by the
+    # reporting-line rules) is listed once, as "manager".
     contacts: list[dict] = []
+    seen: set[int] = set()
     if requester.manager_id:
         manager = db.get(User, requester.manager_id)
         if manager is not None and manager.is_active:
             contacts.append({"id": manager.id, "name": manager.full_name, "role": "manager"})
+            seen.add(manager.id)
 
     for role in ("hr", "admin"):
         users = db.query(User).filter(
@@ -42,10 +46,10 @@ def _allowed_contacts(db: Session, requester: User) -> list[dict]:
             User.is_active.is_(True),
             User.id != requester.id,
         ).order_by(User.full_name).all()
-        contacts.extend(
-            {"id": user.id, "name": user.full_name, "role": role}
-            for user in users
-        )
+        for user in users:
+            if user.id not in seen:
+                contacts.append({"id": user.id, "name": user.full_name, "role": role})
+                seen.add(user.id)
     return contacts
 
 

@@ -6,6 +6,27 @@ import { useAuth } from '../AuthContext'
 
 const ACTIVE = new Set(['open', 'in_progress'])
 
+// Tick-box picker: nobody is included until they're ticked. (A native
+// <select multiple> read as "these people are already part of it".)
+function RecipientPicker({ contacts, value, onChange, max = 3 }) {
+  const toggle = (id) => onChange(value.includes(id) ? value.filter((x) => x !== id) : [...value, id])
+  if (!contacts.length) return <p className="help-text">No one available to contact.</p>
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+      {contacts.map((c) => {
+        const on = value.includes(c.id)
+        return (
+          <label key={c.id} className={`btn sm ${on ? '' : 'secondary'}`} style={{ cursor: 'pointer', gap: 6 }}>
+            <input type="checkbox" checked={on} disabled={!on && value.length >= max}
+                   onChange={() => toggle(c.id)} />
+            {c.name} <span style={{ opacity: 0.75 }}>· {titleCase(c.role)}</span>
+          </label>
+        )
+      })}
+    </div>
+  )
+}
+
 export default function Requests() {
   const toast = useToast()
   const { user } = useAuth()
@@ -99,7 +120,7 @@ export default function Requests() {
         </div>
         {selected.can_reply && <form onSubmit={(e) => { e.preventDefault(); act(`/requests/${selected.id}/comments`, { body: comment, recipient_ids: mentions }); setComment('') }} style={{ marginTop: 14 }}>
           <Field label="Reply" required><textarea className="input" required value={comment} onChange={(e) => setComment(e.target.value)} /></Field>
-          <Field label="Mention people" required help="Choose at least one recipient for this reply."><select className="input" multiple value={mentions.map(String)} onChange={(e) => setMentions([...e.target.selectedOptions].map((o) => Number(o.value)))}>{contacts.map((c) => <option key={c.id} value={c.id}>{c.name} ({c.role})</option>)}</select></Field>
+          <Field label="Send reply to" required help="Tick at least one person."><RecipientPicker contacts={contacts} value={mentions} onChange={setMentions} /></Field>
           <button className="btn sm" disabled={busy || mentions.length === 0}>Send Reply</button>
         </form>}
         <div className="toolbar" style={{ marginTop: 14 }}>
@@ -114,7 +135,7 @@ export default function Requests() {
       <div className="grid cols-2"><Field label="Category" required><select className="input" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value, otherCategory: '' })}>{['IT support', 'HR', 'Payroll', 'Facilities', 'Other'].map((x) => <option key={x}>{x}</option>)}</select></Field><Field label="Priority"><select className="input" value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })}>{['low', 'normal', 'high'].map((x) => <option key={x} value={x}>{titleCase(x)}</option>)}</select></Field></div>
       {form.category === 'Other' && <Field label="Specify category" required><input className="input" required maxLength={80} value={form.otherCategory} onChange={(e) => setForm({ ...form, otherCategory: e.target.value })} placeholder="Enter another category" /></Field>}
       <Field label="Description" required><textarea className="input" required minLength={3} maxLength={10000} rows={5} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></Field>
-      <Field label="Mention people" required help="Choose one to three people. Their role and access are checked again by the server."><select className="input" required multiple value={form.recipient_ids.map(String)} onChange={(e) => setForm({ ...form, recipient_ids: [...e.target.selectedOptions].map((o) => Number(o.value)) })}>{contacts.map((c) => <option key={c.id} value={c.id}>{c.name} ({c.role})</option>)}</select></Field>
+      <Field label="Send to" required help="Tick one to three people (your manager, HR, an admin). Only the people you tick will see this request."><RecipientPicker contacts={contacts} value={form.recipient_ids} onChange={(ids) => setForm({ ...form, recipient_ids: ids })} /></Field>
     </div><div className="modal-foot"><button type="button" className="btn secondary" onClick={() => setCreateOpen(false)}>Cancel</button><button className="btn" disabled={busy || form.recipient_ids.length < 1 || form.recipient_ids.length > 3}>{busy ? 'Sending…' : 'Send Request'}</button></div></form></div></div>}
   </div>
 }
