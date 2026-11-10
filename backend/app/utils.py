@@ -1,21 +1,14 @@
-"""Shared helpers: audit logging, notifications, attendance math, file uploads."""
-import os
-import re
+"""Shared helpers: audit logging, notifications, request eligibility, attendance math."""
 import json
-import uuid
 from datetime import date, datetime, timedelta
 
-from fastapi import HTTPException, UploadFile
+from fastapi import HTTPException
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from .config import (
-    HALF_DAY_THRESHOLD_HOURS, LATE_ARRIVAL_TIME, MAX_UPLOAD_SIZE,
-    STANDARD_WORK_HOURS, UPLOAD_DIR,
-)
-from .models import Attendance, AuditLog, Holiday, Notification, User
-
-ALLOWED_UPLOAD_EXTENSIONS = {".pdf", ".png", ".jpg", ".jpeg", ".doc", ".docx"}
+from .config import HALF_DAY_THRESHOLD_HOURS, LATE_ARRIVAL_TIME, STANDARD_WORK_HOURS
+from .mailer import queue_email
+from .models import Announcement, Attendance, AuditLog, Holiday, Notification, User
 
 
 def check_email_domain(email: str) -> None:
@@ -65,60 +58,77 @@ def notify(
     ))
 
 
-def notify_first_approvers(
-    db: Session, requester: User, title: str, body: str, *,
+def notify_and_email(
+    db: Session, recipient: User, title: str, body: str, kind: str, *,
+    email_subject: str, email_body: str, actor_id: int | None = None,
     entity_type: str | None = None, entity_id: int | None = None,
 ) -> None:
-    """Notify the first active reviewer in the configured approval chain."""
-    manager = db.get(User, requester.manager_id) if requester.manager_id else None
-    if manager is not None and manager.is_active and manager.role == "manager":
-        notify(db, manager.id, title, body, "approval", actor_id=requester.id,
-               entity_type=entity_type, entity_id=entity_id)
-        return
-
-    reviewers = db.query(User).filter(
-        User.role == "hr", User.is_active.is_(True)
-    ).all()
-    if not reviewers:
-        reviewers = db.query(User).filter(
-            User.role == "admin", User.is_active.is_(True)
-        ).all()
-    for reviewer in reviewers:
-        notify(db, reviewer.id, title, body, "approval", actor_id=requester.id,
-               entity_type=entity_type, entity_id=entity_id)
+    """In-app notification plus an email that is sent after commit."""
+    notify(db, recipient.id, title, body, kind, actor_id=actor_id,
+           entity_type=entity_type, entity_id=entity_id)
+    queue_email(db, recipient.email, email_subject, email_body)
 
 
-def validate_mentions(db: Session, requester: User, raw_ids: str | None) -> tuple[list[int], list[User]]:
-    """Validate the selected colleague IDs submitted by a mention control."""
-    try:
-        parsed = json.loads(raw_ids or "[]")
-    except (TypeError, ValueError):
-        raise HTTPException(status_code=400, detail="Mention list is invalid")
+def publish_announcement(db: Session, author: User, title: str, body: str) -> Announcement:
+    """Create an announcement and notify every other active user in-app."""
+    ann = Announcement(title=title, body=body, created_by_id=author.id)
+    db.add(ann)
+    db.flush()
+    for (user_id,) in db.query(User.id).filter(User.is_active.is_(True), User.id != author.id).all():
+        notify(db, user_id, f"📢 {title}", body[:300], "announcement",
+               actor_id=author.id, entity_type="announcement", entity_id=ann.id)
+    return ann
+
+
+NO_MANAGER_MESSAGE = (
+    "You haven't been assigned a manager yet. The HR team has been asked to "
+    "complete your joining formalities; you can submit requests once a "
+    "manager is assigned."
+)
+
+
+def is_onboarding_pending(user: User) -> bool:
+    """Everyone except an Admin must report to a manager before they can
+    request leave, WFH or regularization. Admins never report to anyone."""
+    return user.role != "admin" and user.manager_id is None
+
+
+def require_request_eligibility(user: User) -> None:
+    """Gate every leave/WFH/regularization submission."""
+    if user.role == "admin":
+        raise HTTPException(status_code=403,
+                            detail="Administrators do not submit leave, WFH or regularization requests")
+    if user.manager_id is None:
+        raise HTTPException(status_code=403, detail=NO_MANAGER_MESSAGE)
+
+
+def parse_mention_ids(raw_ids: str | list | None) -> list[int]:
+    """Accept a JSON string (multipart forms) or a list (JSON bodies)."""
+    if isinstance(raw_ids, list):
+        parsed = raw_ids
+    else:
+        try:
+            parsed = json.loads(raw_ids or "[]")
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="Mention list is invalid")
     if not isinstance(parsed, list) or len(parsed) > 20 or any(
         isinstance(value, bool) or not isinstance(value, int) or value < 1
         for value in parsed
     ):
         raise HTTPException(status_code=400, detail="Mention list is invalid")
-    ids = list(dict.fromkeys(parsed))
-    if requester.id in ids:
+    return list(dict.fromkeys(parsed))
+
+
+def validate_mentions(db: Session, author: User, raw_ids: str | list | None) -> tuple[list[int], list[User]]:
+    """Validate tagged colleague IDs: any active colleague except the author."""
+    ids = parse_mention_ids(raw_ids)
+    if author.id in ids:
         raise HTTPException(status_code=400, detail="You cannot mention yourself")
     people = db.query(User).filter(User.id.in_(ids), User.is_active.is_(True)).all() if ids else []
     if len(people) != len(ids):
         raise HTTPException(status_code=400, detail="One or more mentioned colleagues are unavailable")
-    return ids, people
-
-
-def notify_mentions(db: Session, requester: User, people: list[User], *,
-                    entity_type: str, entity_id: int, message: str,
-                    already_notified_ids: set[int] | None = None) -> None:
-    """Notify tagged colleagues without duplicating their approval notification."""
-    skip_ids = already_notified_ids or set()
-    for person in people:
-        if person.id in skip_ids:
-            continue
-        notify(db, person.id, "You were mentioned in a request", message,
-               "mention", actor_id=requester.id,
-               entity_type=entity_type, entity_id=entity_id)
+    by_id = {person.id: person for person in people}
+    return ids, [by_id[i] for i in ids]
 
 
 def holiday_dates(db: Session, start: date, end: date) -> set[date]:
@@ -160,27 +170,6 @@ def recompute_attendance(att: Attendance) -> None:
         # The Admin correction is the reviewed final status. Recompute punch
         # durations, but do not replace that decision with an inferred status.
         att.status = att.status_override
-
-
-def save_upload(file: UploadFile | None, subdir: str) -> str | None:
-    """Persist an uploaded document; returns the stored relative path."""
-    if file is None or not file.filename:
-        return None
-    ext = os.path.splitext(file.filename)[1].lower()
-    if ext not in ALLOWED_UPLOAD_EXTENSIONS:
-        raise HTTPException(status_code=400, detail=f"File type {ext} is not allowed")
-    # Bound memory use before loading the full upload. Reading exactly one byte
-    # beyond the limit is enough to reject an oversized file safely.
-    content = file.file.read(MAX_UPLOAD_SIZE + 1)
-    if len(content) > MAX_UPLOAD_SIZE:
-        raise HTTPException(status_code=400, detail="File exceeds the 5 MB size limit")
-    safe_base = re.sub(r"[^A-Za-z0-9_.-]", "_", os.path.splitext(file.filename)[0])[:40]
-    rel_path = os.path.join(subdir, f"{safe_base}_{uuid.uuid4().hex[:8]}{ext}")
-    abs_path = os.path.join(UPLOAD_DIR, rel_path)
-    os.makedirs(os.path.dirname(abs_path), exist_ok=True)
-    with open(abs_path, "wb") as f:
-        f.write(content)
-    return rel_path
 
 
 def parse_dt(value: str | None) -> datetime | None:

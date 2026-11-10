@@ -4,7 +4,7 @@ import io
 import secrets
 from datetime import date, datetime, timedelta
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
@@ -14,7 +14,7 @@ from ..database import get_db
 from ..deps import client_info, require_admin, require_hr
 from ..attendance_location import attendance_now
 from ..models import (
-    Attendance, Department, Designation, EmployeeDocument, EmployeeLeavePolicy,
+    Attendance, Department, Designation, EmployeeLeavePolicy,
     Holiday, LEAVE_TYPES, LeavePolicy, LeaveRequest, Location,
     RegularizationRequest, ROLES, Shift, User, WFHRequest,
 )
@@ -29,13 +29,64 @@ from ..serializers import (
     attendance_out, holiday_out, leave_out, regularization_out, user_brief,
     user_full, wfh_out,
 )
-from ..utils import audit, check_email_domain, save_upload
+from ..mailer import app_link
+from ..utils import audit, check_email_domain, notify, notify_and_email, publish_announcement
 from .leaves import compute_balances
 
 router = APIRouter(prefix="/hr", tags=["hr"])
 
 
 # ---------- employees ----------
+
+MANAGER_ROLES = {"manager", "admin"}
+
+
+def _validate_reporting_line(db: Session, role: str, manager_id: int | None,
+                             employee_id: int | None = None) -> User | None:
+    """Everyone except an Admin reports to an active Manager or Admin; Admins
+    report to no one. Rejects self-assignment and reporting cycles."""
+    if role == "admin":
+        if manager_id is not None:
+            raise HTTPException(status_code=400, detail="Admins do not report to a manager")
+        return None
+    if manager_id is None:
+        raise HTTPException(status_code=400,
+                            detail="Assign a reporting manager — everyone except an Admin must have one")
+    if employee_id is not None and manager_id == employee_id:
+        raise HTTPException(status_code=400, detail="An employee cannot be their own manager")
+    manager = db.get(User, manager_id)
+    if manager is None or not manager.is_active or manager.role not in MANAGER_ROLES:
+        raise HTTPException(status_code=400,
+                            detail="Choose an active Manager or Admin as reporting manager")
+    if employee_id is not None:
+        ancestor_id, seen = manager.manager_id, {manager.id}
+        while ancestor_id is not None and ancestor_id not in seen:
+            if ancestor_id == employee_id:
+                raise HTTPException(status_code=400, detail="This assignment would create a reporting cycle")
+            seen.add(ancestor_id)
+            ancestor = db.get(User, ancestor_id)
+            ancestor_id = ancestor.manager_id if ancestor else None
+    return manager
+
+
+def _active_report_count(db: Session, manager_id: int) -> int:
+    return db.query(User.id).filter(User.manager_id == manager_id, User.is_active.is_(True)).count()
+
+
+def _announce_manager_assigned(db: Session, emp: User, manager: User, was_pending: bool) -> None:
+    title = "Your onboarding is complete" if was_pending else "Your reporting manager changed"
+    notify_and_email(
+        db, emp, title, f"{manager.full_name} is now your reporting manager. "
+        "You can now apply for leave, WFH and regularization.", "info",
+        actor_id=manager.id,
+        email_subject=f"Tesseract HRMS — {title}",
+        email_body=(f"Hi {emp.full_name},\n\n{manager.full_name} is now your reporting manager. "
+                    f"You can now apply for leave, work from home and regularization:\n"
+                    f"{app_link('/')}\n\n— Tesseract HRMS"),
+    )
+    notify(db, manager.id, "New direct report", f"{emp.full_name} now reports to you.",
+           "info", actor_id=emp.id)
+
 
 @router.get("/employees")
 def list_employees(
@@ -88,28 +139,21 @@ def get_employee(employee_id: int, request: Request, user: User = Depends(requir
 @router.post("/employees/{employee_id}/set-manager")
 def set_manager(employee_id: int, body: SetManagerRequest, request: Request,
                 user: User = Depends(require_hr), db: Session = Depends(get_db)):
-    """Quick assign/remove a reporting manager — used from the employee
-    detail page, separately from the full edit form."""
+    """Assign or change a reporting manager — this is also the step that
+    completes a new joiner's onboarding and unlocks their requests."""
     emp = db.get(User, employee_id)
     if emp is None:
         raise HTTPException(status_code=404, detail="Employee not found")
     if emp.role in {"hr", "admin"} and user.role != "admin":
         raise HTTPException(status_code=403, detail="Only Admin can modify HR or Admin reporting lines")
-    if body.manager_id == employee_id:
-        raise HTTPException(status_code=400, detail="An employee cannot be their own manager")
-    if body.manager_id is not None:
-        mgr = db.get(User, body.manager_id)
-        if mgr is None or not mgr.is_active or mgr.role != "manager":
-            raise HTTPException(status_code=404, detail="Active manager not found")
-        ancestor_id = mgr.manager_id
-        seen = {mgr.id}
-        while ancestor_id is not None and ancestor_id not in seen:
-            if ancestor_id == emp.id:
-                raise HTTPException(status_code=400, detail="This assignment would create a reporting cycle")
-            seen.add(ancestor_id)
-            ancestor = db.get(User, ancestor_id)
-            ancestor_id = ancestor.manager_id if ancestor else None
+    manager = _validate_reporting_line(db, emp.role, body.manager_id, emp.id)
+    was_pending = emp.manager_id is None
+    changed = emp.manager_id != body.manager_id
     emp.manager_id = body.manager_id
+    if manager is not None:
+        emp.profile_completed = True
+        if changed:
+            _announce_manager_assigned(db, emp, manager, was_pending)
     audit(db, user.id, "set_manager", "hr",
           f"{emp.full_name} (#{emp.id}) manager -> {body.manager_id or 'none'}",
           client_info(request))
@@ -232,10 +276,7 @@ def create_employee(body: EmployeeUpsertRequest, request: Request,
     employee_code = body.employee_code.strip() if body.employee_code else None
     if employee_code and db.query(User.id).filter(User.employee_code == employee_code).first():
         raise HTTPException(status_code=409, detail="Employee code is already in use")
-    if body.manager_id is not None:
-        manager = db.get(User, body.manager_id)
-        if manager is None or not manager.is_active or manager.role != "manager":
-            raise HTTPException(status_code=400, detail="Choose an active Manager as reporting manager")
+    _validate_reporting_line(db, body.role, body.manager_id)
     _validate_employee_references(db, body)
 
     emp = User(email=email, full_name=body.full_name.strip(),
@@ -304,25 +345,13 @@ def update_employee(employee_id: int, body: EmployeeUpsertRequest, request: Requ
         raise HTTPException(status_code=400, detail="Change employee roles through the dedicated role-change action")
     if emp.role in {"hr", "admin"} and user.role != "admin":
         raise HTTPException(status_code=403, detail="Only Admin can edit HR or Admin accounts")
-    if body.manager_id == emp.id:
-        raise HTTPException(status_code=400, detail="An employee cannot be their own manager")
     check_email_domain(body.email)
     clash = db.query(User).filter(User.email == body.email.lower(),
                                   User.id != emp.id).first()
     if clash:
         raise HTTPException(status_code=400, detail="Another account uses this email")
-    if body.manager_id is not None:
-        manager = db.get(User, body.manager_id)
-        if manager is None or not manager.is_active or manager.role != "manager":
-            raise HTTPException(status_code=400, detail="Choose an active Manager as reporting manager")
-        ancestor_id = manager.manager_id
-        seen = {manager.id}
-        while ancestor_id is not None and ancestor_id not in seen:
-            if ancestor_id == emp.id:
-                raise HTTPException(status_code=400, detail="This assignment would create a reporting cycle")
-            seen.add(ancestor_id)
-            ancestor = db.get(User, ancestor_id)
-            ancestor_id = ancestor.manager_id if ancestor else None
+    new_manager = _validate_reporting_line(db, emp.role, body.manager_id, emp.id)
+    was_pending, manager_changed = emp.manager_id is None, emp.manager_id != body.manager_id
     _validate_employee_references(db, body, emp)
     employee_code = body.employee_code.strip() if body.employee_code else None
     if employee_code and db.query(User.id).filter(
@@ -335,6 +364,10 @@ def update_employee(employee_id: int, body: EmployeeUpsertRequest, request: Requ
     if employee_code:
         emp.employee_code = employee_code
     _apply_employee_fields(emp, body)
+    if new_manager is not None:
+        emp.profile_completed = True
+        if manager_changed:
+            _announce_manager_assigned(db, emp, new_manager, was_pending)
     audit(db, user.id, "update_employee", "hr",
           f"Updated {emp.full_name} (#{emp.id})", client_info(request))
     try:
@@ -373,14 +406,15 @@ def change_employee_role(employee_id: int, body: EmployeeRoleChangeRequest,
     if old_role == new_role:
         return {"id": employee.id, "role": employee.role, "message": "Role is unchanged"}
 
-    if old_role == "manager" and new_role != "manager":
-        reports = db.query(User.id).filter(
-            User.manager_id == employee.id, User.is_active.is_(True)
-        ).count()
-        if reports:
-            raise HTTPException(status_code=409, detail="Reassign this manager’s active direct reports before changing the role")
+    if old_role in MANAGER_ROLES and new_role not in MANAGER_ROLES and _active_report_count(db, employee.id):
+        raise HTTPException(status_code=409, detail="Reassign this person’s active direct reports before changing the role")
 
     employee.role = new_role
+    if new_role == "admin":
+        # Admins sit outside the reporting tree.
+        employee.manager_id = None
+    # Someone demoted from Admin has no manager yet: their requests stay
+    # locked (onboarding pending) until HR/Admin assigns one.
     revoke_user_sessions(db, employee.id)
     audit(db, user.id, "change_employee_role", "hr",
           f"{employee.full_name} (#{employee.id}): {old_role} -> {new_role}",
@@ -406,10 +440,8 @@ def deactivate(employee_id: int, request: Request,
         ).count()
         if active_admins <= 1:
             raise HTTPException(status_code=409, detail="The last active Admin cannot be deactivated")
-    if emp.role == "manager" and db.query(User.id).filter(
-        User.manager_id == emp.id, User.is_active.is_(True)
-    ).count():
-        raise HTTPException(status_code=409, detail="Reassign this manager’s active direct reports before deactivation")
+    if _active_report_count(db, emp.id):
+        raise HTTPException(status_code=409, detail="Reassign this person’s active direct reports before deactivation")
     emp.is_active = False
     revoke_user_sessions(db, emp.id)
     audit(db, user.id, "deactivate_employee", "hr", f"{emp.full_name} (#{emp.id})",
@@ -512,44 +544,6 @@ def set_leave_overrides(employee_id: int, body: EmployeeLeaveOverrideRequest, re
     return _leave_override_payload(db, employee_id)
 
 
-# ---------- employee documents ----------
-
-@router.get("/employees/{employee_id}/documents")
-def list_documents(employee_id: int, request: Request, user: User = Depends(require_hr),
-                   db: Session = Depends(get_db)):
-    if db.get(User, employee_id) is None:
-        raise HTTPException(status_code=404, detail="Employee not found")
-    docs = db.query(EmployeeDocument).filter(
-        EmployeeDocument.user_id == employee_id) \
-        .order_by(EmployeeDocument.created_at.desc()).all()
-    if user.role == "admin":
-        audit(db, user.id, "list_employee_documents", "admin",
-              f"Viewed document list for employee #{employee_id}", client_info(request))
-        db.commit()
-    return [{"id": d.id, "name": d.name, "file_path": d.file_path,
-             "created_at": d.created_at.isoformat()} for d in docs]
-
-
-@router.post("/employees/{employee_id}/documents")
-def upload_document(employee_id: int, request: Request,
-                    name: str = Form(..., min_length=1, max_length=150),
-                    file: UploadFile = File(...),
-                    user: User = Depends(require_hr), db: Session = Depends(get_db)):
-    if db.get(User, employee_id) is None:
-        raise HTTPException(status_code=404, detail="Employee not found")
-    name = name.strip()
-    if not name:
-        raise HTTPException(status_code=400, detail="Document name cannot be blank")
-    path = save_upload(file, "employee_docs")
-    doc = EmployeeDocument(user_id=employee_id, name=name, file_path=path,
-                           uploaded_by_id=user.id)
-    db.add(doc)
-    audit(db, user.id, "upload_document", "hr",
-          f"'{name}' for employee #{employee_id}", client_info(request))
-    db.commit()
-    return {"id": doc.id, "name": doc.name, "file_path": doc.file_path}
-
-
 # ---------- leave policies ----------
 
 @router.get("/policies")
@@ -587,8 +581,13 @@ def list_holidays(year: int | None = None, user: User = Depends(require_hr),
 @router.post("/holidays")
 def add_holiday(body: HolidayRequest, request: Request,
                 user: User = Depends(require_hr), db: Session = Depends(get_db)):
+    if db.query(Holiday.id).filter(Holiday.date == body.date).first():
+        raise HTTPException(status_code=409, detail="A holiday already exists on this date")
     h = Holiday(date=body.date, name=body.name, holiday_type=body.holiday_type)
     db.add(h)
+    kind = "optional holiday" if body.holiday_type == "optional" else "holiday"
+    publish_announcement(db, user, f"Holiday: {body.name}",
+                         f"{body.date:%A, %d %B %Y} is a {kind}: {body.name}.")
     audit(db, user.id, "add_holiday", "hr", f"{body.name} on {body.date}",
           client_info(request))
     db.commit()

@@ -12,7 +12,7 @@ from ..attendance_location import (
     validate_attendance_location,
 )
 from ..models import (
-    Attendance, AttendanceBreak, Holiday, LeaveRequest, User, WFHRequest,
+    Attendance, AttendanceBreak, CompanyWFHDay, Holiday, LeaveRequest, User, WFHRequest,
 )
 from ..schemas import CheckInRequest, CheckOutRequest
 from ..serializers import attendance_out
@@ -27,11 +27,21 @@ def _today_record(db: Session, user_id: int, for_date: date) -> Attendance | Non
 
 
 def _has_approved_wfh(db: Session, user_id: int, for_date: date) -> bool:
+    """Approved personal WFH, or a company-wide WFH day declared by an Admin."""
+    if db.query(CompanyWFHDay.id).filter(CompanyWFHDay.date == for_date).first():
+        return True
     return db.query(WFHRequest.id).filter(
         WFHRequest.user_id == user_id,
         WFHRequest.date == for_date,
         WFHRequest.status == "approved",
     ).first() is not None
+
+
+def attendance_user(user: User = Depends(get_current_user)) -> User:
+    """Admins sit outside attendance tracking: they never check in or out."""
+    if user.role == "admin":
+        raise HTTPException(status_code=403, detail="Administrators do not record attendance")
+    return user
 
 
 def _require_checkout_location(body: CheckOutRequest) -> tuple[float, float, float]:
@@ -55,7 +65,7 @@ def today(user: User = Depends(get_current_user), db: Session = Depends(get_db))
 
 @router.post("/check-in")
 def check_in(body: CheckInRequest, request: Request,
-             user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+             user: User = Depends(attendance_user), db: Session = Depends(get_db)):
     now = attendance_now()
     att = _today_record(db, user.id, now.date())
     if att and att.check_in:
@@ -89,7 +99,7 @@ def check_in(body: CheckInRequest, request: Request,
 
 @router.post("/check-out")
 def check_out(body: CheckOutRequest, request: Request,
-              user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+              user: User = Depends(attendance_user), db: Session = Depends(get_db)):
     now = attendance_now()
     att = _today_record(db, user.id, now.date())
     if att is None or att.check_in is None:
@@ -125,7 +135,7 @@ def check_out(body: CheckOutRequest, request: Request,
 
 @router.post("/recheck-in")
 def recheck_in(body: CheckInRequest, request: Request,
-               user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+               user: User = Depends(attendance_user), db: Session = Depends(get_db)):
     """Undo a mistaken checkout for up to 60 seconds, keeping evidence in audit."""
     now = attendance_now()
     att = _today_record(db, user.id, now.date())
@@ -166,7 +176,7 @@ def recheck_in(body: CheckInRequest, request: Request,
 
 @router.post("/break/start")
 def break_start(body: CheckOutRequest, request: Request,
-                user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+                user: User = Depends(attendance_user), db: Session = Depends(get_db)):
     now = attendance_now()
     att = _today_record(db, user.id, now.date())
     if att is None or att.check_in is None:
@@ -184,7 +194,7 @@ def break_start(body: CheckOutRequest, request: Request,
 
 @router.post("/break/end")
 def break_end(body: CheckOutRequest, request: Request,
-              user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+              user: User = Depends(attendance_user), db: Session = Depends(get_db)):
     now = attendance_now()
     att = _today_record(db, user.id, now.date())
     open_break = next((b for b in (att.breaks if att else []) if b.end_time is None), None)
@@ -222,6 +232,8 @@ def build_month_calendar(
     wfh_dates = {w.date for w in db.query(WFHRequest).filter(
         WFHRequest.user_id == target_user.id, WFHRequest.status == "approved",
         WFHRequest.date >= first, WFHRequest.date <= last).all()}
+    company_wfh = {w.date: w for w in db.query(CompanyWFHDay).filter(
+        CompanyWFHDay.date >= first, CompanyWFHDay.date <= last).all()}
 
     leave_dates = {}
     for lv in leaves:
@@ -247,6 +259,8 @@ def build_month_calendar(
             cell.update(status="holiday", detail={"name": holidays[d].name})
         elif d in leave_dates:
             cell.update(status="leave", detail={"leave_type": leave_dates[d]})
+        elif d in company_wfh:
+            cell.update(status="wfh", detail={"company_wfh": True, "name": company_wfh[d].note})
         elif d in wfh_dates:
             cell["status"] = "wfh"
         elif d.weekday() >= 5:

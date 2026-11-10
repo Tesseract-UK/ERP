@@ -32,11 +32,19 @@ def user_full(u: User, include_sensitive: bool = False) -> dict:
         "is_active": u.is_active,
         "must_change_password": u.must_change_password,
         "profile_completed": u.profile_completed,
+        # Everyone but an Admin needs a manager before requests unlock; until
+        # then HR is still completing the joining formalities.
+        "onboarding_pending": u.role != "admin" and u.manager_id is None,
+        "can_request": u.role != "admin" and u.manager_id is not None,
     }
     if include_sensitive:
         data.update(pan_number=u.pan_number, aadhaar_number=u.aadhaar_number,
                     passport_number=u.passport_number, bank_account=u.bank_account,
                     ifsc_code=u.ifsc_code)
+    elif data["onboarding_pending"]:
+        # Nothing to show until HR records these during onboarding.
+        data.update(pan_number=None, aadhaar_number=None, passport_number=None,
+                    bank_account=None, ifsc_code=None)
     else:
         # Masked view for the employee's own profile page.
         data.update(
@@ -129,13 +137,12 @@ def _request_common(r, include_user: bool) -> dict:
 def leave_out(r: LeaveRequest, include_user: bool = False) -> dict:
     return {**_request_common(r, include_user), "kind": "leave",
             "leave_type": r.leave_type, "start_date": r.start_date.isoformat(),
-            "end_date": r.end_date.isoformat(), "days": r.days,
-            "document_path": r.document_path}
+            "end_date": r.end_date.isoformat(), "days": r.days}
 
 
 def wfh_out(r: WFHRequest, include_user: bool = False) -> dict:
     return {**_request_common(r, include_user), "kind": "wfh",
-            "date": r.date.isoformat(), "document_path": r.document_path}
+            "date": r.date.isoformat()}
 
 
 def regularization_out(r: RegularizationRequest, include_user: bool = False) -> dict:

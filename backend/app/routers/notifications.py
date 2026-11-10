@@ -1,19 +1,13 @@
 """In-app notifications."""
-import json
-
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from ..conversations import KIND_MODELS, can_view, conversation_out, load_request
 from ..database import get_db
 from ..deps import get_current_user
-from ..models import (
-    Announcement, LeaveRequest, Notification, RegularizationRequest, User,
-    WFHRequest,
-)
-from ..serializers import (
-    announcement_out, leave_out, notification_out, regularization_out, wfh_out,
-)
+from ..models import Announcement, Notification, User
+from ..serializers import announcement_out, notification_out
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
 
@@ -50,42 +44,16 @@ def notification_detail(notification_id: int, user: User = Depends(get_current_u
         request_record = _get_accessible_request(db, item.entity_id, user)
         result["request"] = _serialize(request_record, user, include_messages=True)
         return result
-    if item.entity_type == "leave":
-        model, serialize = LeaveRequest, leave_out
-    elif item.entity_type == "wfh":
-        model, serialize = WFHRequest, wfh_out
-    elif item.entity_type == "regularization":
-        model, serialize = RegularizationRequest, regularization_out
-    else:
-        return result
-
-    request_record = db.get(model, item.entity_id)
-    if request_record is None:
-        result["details_unavailable"] = True
-        return result
-    owner_id = getattr(request_record, "user_id", getattr(request_record, "requester_id", None))
-    authorized = (
-        user.id == owner_id or user.role in {"hr", "admin"}
-        or (user.role == "manager" and getattr(request_record.user, "manager_id", None) == user.id)
-    )
-    mentioned_ids = []
-    if isinstance(request_record, (LeaveRequest, WFHRequest, RegularizationRequest)):
+    if item.entity_type in KIND_MODELS:
         try:
-            mentioned_ids = json.loads(request_record.mentions_json or "[]")
-        except (TypeError, ValueError):
-            mentioned_ids = []
-    mentioned_only = user.id in mentioned_ids and user.id != owner_id and user.role not in {"hr", "admin"} and not (
-        user.role == "manager" and getattr(request_record.user, "manager_id", None) == user.id
-    )
-    authorized = authorized or user.id in mentioned_ids
-    if not authorized:
-        raise HTTPException(status_code=404, detail="Notification not found")
-    request_data = serialize(request_record, include_user=True)
-    if mentioned_only:
-        # Tags notify colleagues without exposing private leave reasons or documents.
-        request_data["reason"] = None
-        request_data["document_path"] = None
-    result["request"] = request_data
+            record = load_request(db, item.entity_type, item.entity_id)
+        except HTTPException:
+            result["details_unavailable"] = True
+            return result
+        if not can_view(db, user, item.entity_type, record):
+            result["details_unavailable"] = True
+            return result
+        result["conversation"] = conversation_out(db, user, item.entity_type, record)
     return result
 
 

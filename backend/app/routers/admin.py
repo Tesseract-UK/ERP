@@ -20,7 +20,7 @@ from ..schemas import (
     AnnouncementRequest, LocationRequest, NamedItemRequest, SettingsRequest, ShiftRequest,
 )
 from ..serializers import announcement_out, audit_out
-from ..utils import audit, notify
+from ..utils import audit, publish_announcement
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -141,12 +141,7 @@ def list_announcements(user: User = Depends(get_current_user),
 @router.post("/announcements")
 def create_announcement(body: AnnouncementRequest, request: Request,
                         user: User = Depends(require_hr), db: Session = Depends(get_db)):
-    ann = Announcement(title=body.title, body=body.body, created_by_id=user.id)
-    db.add(ann)
-    db.flush()
-    for u in db.query(User).filter(User.is_active.is_(True), User.id != user.id).all():
-        notify(db, u.id, f"📢 {body.title}", body.body[:300], "announcement",
-               actor_id=user.id, entity_type="announcement", entity_id=ann.id)
+    ann = publish_announcement(db, user, body.title, body.body)
     audit(db, user.id, "create_announcement", "admin", body.title, client_info(request))
     db.commit()
     return announcement_out(ann)

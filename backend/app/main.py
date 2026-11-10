@@ -12,6 +12,8 @@ from .routers import (
     approvals,
     attendance,
     auth,
+    company_calendar,
+    conversations,
     dashboard,
     employee_requests,
     hr,
@@ -212,6 +214,32 @@ def _ensure_new_columns():
 
 _ensure_new_columns()
 
+
+def _backfill_conversation_participants():
+    """People tagged before conversations existed become thread participants."""
+    import json
+    from sqlalchemy.orm import Session as _Session
+    from .models import (LeaveRequest, RegularizationRequest, RequestParticipant,
+                         WFHRequest)
+    with _Session(engine) as db:
+        existing = {(p.kind, p.request_id, p.user_id) for p in db.query(RequestParticipant).all()}
+        for kind, model in (("leave", LeaveRequest), ("wfh", WFHRequest),
+                            ("regularization", RegularizationRequest)):
+            for req in db.query(model).filter(model.mentions_json.notin_(["[]", ""])).all():
+                try:
+                    ids = json.loads(req.mentions_json or "[]")
+                except (TypeError, ValueError):
+                    continue
+                for user_id in ids:
+                    if isinstance(user_id, int) and (kind, req.id, user_id) not in existing:
+                        db.add(RequestParticipant(kind=kind, request_id=req.id,
+                                                  user_id=user_id, added_by_id=req.user_id))
+                        existing.add((kind, req.id, user_id))
+        db.commit()
+
+
+_backfill_conversation_participants()
+
 for router in (
     auth.router,
     dashboard.router,
@@ -226,6 +254,8 @@ for router in (
     employee_requests.router,
     notifications.router,
     profile.router,
+    conversations.router,
+    company_calendar.router,
 ):
     app.include_router(router)
 

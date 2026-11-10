@@ -306,6 +306,59 @@ class Holiday(Base):
     holiday_type: Mapped[str] = mapped_column(String(20), default="company")
 
 
+class CompanyWFHDay(Base):
+    """A date an Admin declared work-from-home for the whole company. It does
+    not use anyone's WFH balance and lets everyone check in from anywhere."""
+    __tablename__ = "company_wfh_days"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    date: Mapped[date] = mapped_column(Date, unique=True, index=True)
+    note: Mapped[str] = mapped_column(String(200))
+    created_by_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    created_by = relationship("User", lazy="joined")
+
+
+# Leave, WFH and regularization requests each carry one conversation thread.
+CONVERSATION_KINDS = ("leave", "wfh", "regularization")
+
+
+class RequestParticipant(Base):
+    """Someone @-tagged into a request's conversation. The requester, their
+    manager and Admins can always see it; tagged people are added here."""
+    __tablename__ = "request_participants"
+    __table_args__ = (
+        UniqueConstraint("kind", "request_id", "user_id", name="uq_request_conversation_participant"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    kind: Mapped[str] = mapped_column(String(20), index=True)
+    request_id: Mapped[int] = mapped_column(Integer, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    added_by_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User", foreign_keys=[user_id], lazy="joined")
+
+
+class RequestComment(Base):
+    """One message in a request's conversation; message_type "decision" marks
+    the approve/reject entry so the thread doubles as the request history."""
+    __tablename__ = "request_comments"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    kind: Mapped[str] = mapped_column(String(20), index=True)
+    request_id: Mapped[int] = mapped_column(Integer, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    body: Mapped[str] = mapped_column(Text)
+    message_type: Mapped[str] = mapped_column(String(20), default="comment")
+    mentions_json: Mapped[str] = mapped_column(Text, default="[]")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+
+    user = relationship("User", foreign_keys=[user_id], lazy="joined")
+
+
 class Announcement(Base):
     __tablename__ = "announcements"
 

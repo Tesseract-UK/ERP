@@ -38,7 +38,8 @@ from ..session_service import (
     session_id_from_token,
 )
 from ..serializers import user_full
-from ..utils import audit, check_email_domain
+from ..mailer import app_link
+from ..utils import audit, check_email_domain, notify_and_email
 
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -65,6 +66,28 @@ def _registration_employee_code(db: Session, user: User) -> str:
         # HR may have manually assigned a code matching this user's ID.
         return f"{base}-{secrets.token_hex(4).upper()}"
     return base
+
+
+def _request_onboarding(db: Session, joiner: User) -> None:
+    """Ask HR (and Admins) to complete a new joiner's formalities."""
+    reviewers = db.query(User).filter(
+        User.role.in_(("hr", "admin")), User.is_active.is_(True)
+    ).all()
+    for reviewer in reviewers:
+        notify_and_email(
+            db, reviewer, "New joiner awaiting onboarding",
+            f"{joiner.full_name} ({joiner.email}) signed up. Complete their joining "
+            "formalities and assign a reporting manager.", "onboarding",
+            actor_id=joiner.id,
+            email_subject=f"New joiner awaiting onboarding: {joiner.full_name}",
+            email_body=(
+                f"Hi {reviewer.full_name},\n\n{joiner.full_name} ({joiner.email}) has signed "
+                "up on Tesseract HRMS. Please complete their joining formalities (personal, "
+                "ID and bank details) and assign a reporting manager. Until a manager is "
+                "assigned they cannot apply for leave, WFH or regularization.\n\n"
+                f"{app_link(f'/employees/{joiner.id}')}\n\n— Tesseract HRMS"
+            ),
+        )
 
 
 def _link_or_create_google_user(
@@ -119,6 +142,7 @@ def _link_or_create_google_user(
                     db.add(user)
                     db.flush()
                     user.employee_code = _registration_employee_code(db, user)
+                    _request_onboarding(db, user)
 
             if not user.is_active:
                 db.rollback()

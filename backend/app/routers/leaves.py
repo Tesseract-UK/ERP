@@ -2,10 +2,11 @@
 from datetime import date, datetime
 import json
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from ..conversations import announce_new_request
 from ..database import get_db
 from ..deps import client_info, get_current_user
 from ..attendance_location import attendance_now
@@ -15,11 +16,18 @@ from ..models import (
 from ..schemas import LeaveCreateRequest
 from ..serializers import leave_out
 from ..utils import (
-    audit, notify_first_approvers, notify_mentions, save_upload,
-    validate_mentions, working_days_between,
+    audit, is_onboarding_pending, require_request_eligibility, validate_mentions,
+    working_days_between,
 )
 
 router = APIRouter(prefix="/leaves", tags=["leaves"])
+
+
+def _zero_balances() -> dict:
+    balances = {lt: {"allocated": 0, "used": 0.0, "remaining": 0} for lt in LEAVE_TYPES}
+    balances["wfh"] = {"allocated": 0, "used": 0.0, "remaining": 0,
+                       "monthly_rate": 0, "annual_cap": 0}
+    return balances
 
 
 def compute_balances(db: Session, user_id: int) -> dict:
@@ -30,7 +38,13 @@ def compute_balances(db: Session, user_id: int) -> dict:
     WFH is accrued monthly rather than granted upfront: the annual figure
     (default 24) is really "2/month" — so only monthly_rate × months elapsed
     so far this year is available, and going over it shows as a real
-    negative balance (not floored) that next month's accrual reduces."""
+    negative balance (not floored) that next month's accrual reduces.
+
+    Nobody has a balance until HR finishes onboarding them (assigns a
+    manager), and Admins have none because they never request leave."""
+    user = db.get(User, user_id)
+    if user is None or is_onboarding_pending(user) or user.role == "admin":
+        return _zero_balances()
     today = attendance_now().date()
     year_start, year_end = date(today.year, 1, 1), date(today.year, 12, 31)
     policies = {p.leave_type: p.annual_allocation for p in db.query(LeavePolicy).all()}
@@ -76,14 +90,9 @@ def my_leaves(user: User = Depends(get_current_user), db: Session = Depends(get_
 
 
 @router.post("")
-def apply_leave(request: Request,
-                leave_type: str = Form(...), start_date: date = Form(...),
-                end_date: date = Form(...), reason: str = Form(...),
-                mentioned_user_ids: str = Form("[]"),
-                document: UploadFile | None = File(None),
+def apply_leave(body: LeaveCreateRequest, request: Request,
                 user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    body = LeaveCreateRequest(leave_type=leave_type, start_date=start_date,
-                              end_date=end_date, reason=reason)
+    require_request_eligibility(user)
     days = working_days_between(db, body.start_date, body.end_date)
     if days <= 0:
         raise HTTPException(status_code=400,
@@ -105,27 +114,18 @@ def apply_leave(request: Request,
                 status_code=400,
                 detail=f"Insufficient balance: {remaining} day(s) remaining for this leave type")
 
-    mentioned_ids, mentioned_people = validate_mentions(db, user, mentioned_user_ids)
+    mentioned_ids, mentioned_people = validate_mentions(db, user, body.mentioned_user_ids)
 
     req = LeaveRequest(user_id=user.id, leave_type=body.leave_type,
                        start_date=body.start_date, end_date=body.end_date,
                        days=days, reason=body.reason,
-                       mentions_json=json.dumps(mentioned_ids),
-                       document_path=save_upload(document, "leave_docs"))
+                       mentions_json=json.dumps(mentioned_ids))
     db.add(req)
     db.flush()
-    notify_first_approvers(
-        db, user, "New leave request",
-        f"{user.full_name} requested {days} day(s) of "
+    announce_new_request(
+        db, user, "leave", req, mentioned_people,
+        f"{user.full_name} requested {days:g} day(s) of "
         f"{body.leave_type.replace('_', ' ')} leave",
-        entity_type="leave", entity_id=req.id,
-    )
-    approver_ids = {n.user_id for n in db.new if getattr(n, "kind", None) == "approval"}
-    notify_mentions(
-        db, user, mentioned_people, entity_type="leave", entity_id=req.id,
-        message=f"{user.full_name} mentioned you in a leave request for "
-                f"{body.start_date.isoformat()} to {body.end_date.isoformat()}",
-        already_notified_ids=approver_ids,
     )
     audit(db, user.id, "apply_leave", "leaves",
           f"{body.leave_type} {body.start_date} → {body.end_date}", client_info(request))

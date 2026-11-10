@@ -132,6 +132,21 @@ UPLOAD_DIR = os.getenv(
 )
 MAX_UPLOAD_SIZE = 5 * 1024 * 1024  # 5 MB
 
+# Outbound email. "console" only logs messages (default until SMTP credentials
+# exist); "smtp" sends through SMTP_HOST, e.g. smtp.gmail.com with an App
+# Password for the notifications@ mailbox. "disabled" drops messages.
+EMAIL_BACKEND = os.getenv("EMAIL_BACKEND", "console").strip().lower()
+EMAIL_FROM = os.getenv("EMAIL_FROM", "Tesseract HRMS <notifications@tesseractuk.in>").strip()
+SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com").strip()
+SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+SMTP_USERNAME = os.getenv("SMTP_USERNAME", "").strip()
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "").strip()
+SMTP_USE_TLS = os.getenv("SMTP_USE_TLS", "true").strip().lower() == "true"
+if EMAIL_BACKEND not in {"console", "smtp", "disabled"}:
+    raise RuntimeError("EMAIL_BACKEND must be console, smtp or disabled")
+if EMAIL_BACKEND == "smtp" and not (SMTP_HOST and SMTP_USERNAME and SMTP_PASSWORD):
+    raise RuntimeError("EMAIL_BACKEND=smtp requires SMTP_HOST, SMTP_USERNAME and SMTP_PASSWORD")
+
 # Working-day rules (can be moved to company settings later).
 STANDARD_WORK_HOURS = float(os.getenv("STANDARD_WORK_HOURS", "8"))
 HALF_DAY_THRESHOLD_HOURS = float(

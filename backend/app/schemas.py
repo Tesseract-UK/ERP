@@ -36,20 +36,6 @@ class SetPasswordRequest(BaseModel):
     new_password: str = Field(min_length=8, max_length=128)
 
 
-class OnboardingRequest(BaseModel):
-    """One-time personal-details submission by a new employee."""
-    phone: str = Field(min_length=7, max_length=20)
-    address: str = Field(min_length=5, max_length=1000)
-    emergency_contact_name: str = Field(min_length=2, max_length=150)
-    emergency_contact_phone: str = Field(min_length=7, max_length=20)
-    date_of_birth: date | None = None
-    pan_number: str | None = Field(default=None, max_length=20)
-    aadhaar_number: str | None = Field(default=None, max_length=20)
-    passport_number: str | None = Field(default=None, max_length=30)
-    bank_account: str | None = Field(default=None, max_length=30)
-    ifsc_code: str | None = Field(default=None, max_length=15)
-
-
 class CheckInRequest(BaseModel):
     # local_time is accepted temporarily for older frontend builds, but ignored.
     local_time: str | None = None
@@ -84,6 +70,7 @@ class LeaveCreateRequest(BaseModel):
     start_date: date
     end_date: date
     reason: str = Field(min_length=3, max_length=2000)
+    mentioned_user_ids: list[int] = Field(default_factory=list, max_length=20)
 
     @field_validator("leave_type")
     @classmethod
@@ -104,6 +91,7 @@ class LeaveCreateRequest(BaseModel):
 class WFHCreateRequest(BaseModel):
     date: date
     reason: str = Field(min_length=3, max_length=2000)
+    mentioned_user_ids: list[int] = Field(default_factory=list, max_length=20)
 
 
 class RegularizationCreateRequest(BaseModel):
@@ -317,3 +305,13 @@ class ResetPasswordRequest(BaseModel):
 
 class SetManagerRequest(BaseModel):
     manager_id: int | None = None
+
+
+class ConversationCommentRequest(BaseModel):
+    body: str = Field(min_length=1, max_length=4000)
+    mentioned_user_ids: list[int] = Field(default_factory=list, max_length=20)
+
+
+class CompanyWFHDayRequest(BaseModel):
+    date: date
+    note: str = Field(default="Company-wide work from home", min_length=1, max_length=200)

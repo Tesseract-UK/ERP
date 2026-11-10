@@ -3,7 +3,7 @@
 import json
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
+from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
@@ -21,7 +21,7 @@ from ..schemas import (
     EmployeeRequestForwardRequest,
     EmployeeRequestStatusRequest,
 )
-from ..utils import audit, notify, save_upload
+from ..utils import audit, notify
 
 
 router = APIRouter(prefix="/requests", tags=["employee requests"])
@@ -110,7 +110,6 @@ def _serialize(item: EmployeeRequest, user: User, *, include_messages: bool = Fa
         "category": item.category,
         "priority": item.priority,
         "description": item.description,
-        "attachment_path": item.attachment_path,
         "status": item.status,
         "participants": participants,
         "created_at": item.created_at.isoformat(),
@@ -240,7 +239,6 @@ def create_request(
     priority: str = Form("normal"),
     description: str = Form(..., min_length=3, max_length=10000),
     recipient_ids: str = Form(...),
-    attachment: UploadFile | None = File(None),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -253,7 +251,6 @@ def create_request(
         category=category.strip(),
         priority=priority,
         description=description.strip(),
-        attachment_path=save_upload(attachment, "employee_requests"),
         status="open",
     )
     db.add(item)

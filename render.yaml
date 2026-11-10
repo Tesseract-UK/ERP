@@ -37,10 +37,16 @@ services:
         value: none
       - key: PYTHON_VERSION
         value: 3.11.9
-      - key: CLERK_SECRET_KEY
-        sync: false  # set manually in the Render dashboard — do not commit this value
-      - key: CLERK_PUBLISHABLE_KEY
-        sync: false  # set manually in the Render dashboard
+      # Email: "console" only logs. Switch to "smtp" once the
+      # notifications@tesseractuk.in App Password exists.
+      - key: EMAIL_BACKEND
+        value: console
+      - key: EMAIL_FROM
+        value: Tesseract HRMS <notifications@tesseractuk.in>
+      - key: SMTP_USERNAME
+        sync: false  # notifications@tesseractuk.in
+      - key: SMTP_PASSWORD
+        sync: false  # Google Workspace App Password — never commit
 
 databases:
   - name: tesseract-hrms-db
