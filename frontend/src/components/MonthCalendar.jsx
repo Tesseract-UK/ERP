@@ -3,15 +3,16 @@
 // set (Attendance page only), clicking a date also offers quick Leave/WFH
 // application for that date, and shows any existing request for it.
 import { useState } from 'react'
+import { useAuth } from '../AuthContext'
 import {
   Modal, StatusBadge, fmtDateTime, fmtHours, fmtTime, localDateStr, titleCase,
 } from './ui'
 import { ChevronLeft, ChevronRight } from './icons'
-import { LeaveApplyForm, WfhApplyForm } from './RequestForms'
+import { ApplyRequestForm, KindBadge } from './RequestForms'
 
 const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const LEGEND = [
-  ['st-present', 'Present'], ['st-wfh', 'Work From Home'], ['st-leave', 'Leave / Half Day'],
+  ['st-present', 'Present'], ['st-wfh', 'Work From Home'], ['st-leave', 'Leave'], ['st-half_day', 'Half Day'],
   ['st-absent', 'Absent'], ['st-holiday', 'Holiday / Weekend'],
 ]
 
@@ -32,27 +33,19 @@ export function MonthNav({ year, month, onChange }) {
 }
 
 function DayDetail({ cell, selfService, requests, onChanged, onClose }) {
+  const { user } = useAuth()
   const [mode, setMode] = useState('view') // 'view' | 'leave' | 'wfh'
   const d = cell.detail
   const isAttendance = d && d.check_in !== undefined
   const title = new Date(cell.date + 'T00:00')
     .toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
 
-  if (mode === 'leave') {
+  if (mode !== 'view') {
     return (
-      <Modal title="Apply for Leave" onClose={onClose}>
-        <LeaveApplyForm initialStart={cell.date} initialEnd={cell.date}
-                        onCancel={() => setMode('view')}
-                        onDone={() => { onChanged?.(); onClose() }} />
-      </Modal>
-    )
-  }
-  if (mode === 'wfh') {
-    return (
-      <Modal title="Request Work From Home" onClose={onClose}>
-        <WfhApplyForm initialStart={cell.date} initialEnd={cell.date}
-                      onCancel={() => setMode('view')}
-                      onDone={() => { onChanged?.(); onClose() }} />
+      <Modal title="Apply for Leave or WFH" onClose={onClose}>
+        <ApplyRequestForm initialType={mode} initialStart={cell.date} initialEnd={cell.date}
+                          onCancel={() => setMode('view')}
+                          onDone={() => { onChanged?.(); onClose() }} />
       </Modal>
     )
   }
@@ -61,7 +54,8 @@ function DayDetail({ cell, selfService, requests, onChanged, onClose }) {
     ? (requests || []).filter((r) => ['pending', 'approved'].includes(r.status)
         && cell.date >= r.start_date && cell.date <= r.end_date)
     : []
-  const canApply = selfService && cell.status !== 'holiday' && cell.status !== 'weekend'
+  const companyWfh = Boolean(d?.company_wfh)
+  const canApply = selfService && cell.status !== 'holiday' && cell.status !== 'weekend' && !companyWfh
 
   return (
     <Modal title={title} onClose={onClose}>
@@ -90,6 +84,7 @@ function DayDetail({ cell, selfService, requests, onChanged, onClose }) {
         <p style={{ color: 'var(--ink-2)' }}>
           {cell.status === 'holiday' && d?.name ? `Holiday: ${d.name}`
             : cell.status === 'leave' && d?.leave_type ? `On ${titleCase(d.leave_type)} leave`
+            : companyWfh ? `Company-wide work from home${d.name ? ` — ${d.name}` : ''}`
             : cell.status === 'wfh' ? 'Approved work-from-home day'
             : cell.status === 'weekend' ? 'Weekend'
             : 'No attendance record for this day.'}
@@ -103,7 +98,8 @@ function DayDetail({ cell, selfService, requests, onChanged, onClose }) {
               {dayRequests.map((r) => (
                 <div key={`${r.kind}-${r.id}`}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <strong>{r.kind === 'leave' ? `${titleCase(r.leave_type)} Leave` : 'Work From Home'}</strong>
+                    <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}><KindBadge kind={r.kind} />
+                      {r.kind === 'leave' && <strong>{titleCase(r.leave_type)}</strong>}</span>
                     <StatusBadge status={r.status} />
                   </div>
                   {r.reason && <div className="help-text">“{r.reason}”</div>}
@@ -112,11 +108,13 @@ function DayDetail({ cell, selfService, requests, onChanged, onClose }) {
                 </div>
               ))}
             </div>
-          ) : (
+          ) : user?.can_request ? (
             <div className="toolbar">
               <button type="button" className="btn secondary sm" onClick={() => setMode('leave')}>Apply for Leave</button>
               <button type="button" className="btn secondary sm" onClick={() => setMode('wfh')}>Request WFH</button>
             </div>
+          ) : (
+            <p className="help-text">Requests unlock once HR assigns your reporting manager.</p>
           )}
         </div>
       )}

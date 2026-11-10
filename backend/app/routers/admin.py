@@ -40,9 +40,10 @@ def org_data(user: User = Depends(get_current_user), db: Session = Depends(get_d
         "shifts": [{"id": s.id, "name": s.name, "start_time": s.start_time,
                     "end_time": s.end_time, "is_active": s.is_active}
                    for s in db.query(Shift).order_by(Shift.name).all()],
-        "managers": [{"id": u.id, "full_name": u.full_name}
+        # Anyone who can be a reporting manager: Managers and Admins.
+        "managers": [{"id": u.id, "full_name": u.full_name, "role": u.role}
                      for u in db.query(User).filter(
-                         User.role == "manager",
+                         User.role.in_(("manager", "admin")),
                          User.is_active.is_(True)).order_by(User.full_name).all()],
     }
 

@@ -42,6 +42,7 @@ function EmployeeModal({ employeeId, orgData, onClose, onDone }) {
         payload[k] = payload[k] ? Number(payload[k]) : null
       }
       for (const k of Object.keys(payload)) if (payload[k] === '') payload[k] = null
+      if (payload.role === 'admin') payload.manager_id = null
       if (employeeId) {
         await api.put(`/hr/employees/${employeeId}`, payload)
         toast('Employee updated', 'success')
@@ -95,13 +96,19 @@ function EmployeeModal({ employeeId, orgData, onClose, onDone }) {
             </select>
             {employeeId && <div className="help-text">Use the employee list’s Change Role action. Admin assigns HR; HR may promote Employees to Manager.</div>}
           </Field>
-          <Field label="Reporting manager">
-            <select className="input" value={form.manager_id} onChange={(e) => set('manager_id', e.target.value)}>
-              <option value="">— None —</option>
-              {orgData.managers.filter((m) => m.id !== employeeId).map((m) =>
-                <option key={m.id} value={m.id}>{m.full_name}</option>)}
-            </select>
-          </Field>
+          {form.role === 'admin' ? (
+            <Field label="Reporting manager" help="Admins don't report to anyone.">
+              <input className="input" disabled value="—" />
+            </Field>
+          ) : (
+            <Field label="Reporting manager" required help="Everyone except an Admin must have a manager.">
+              <select className="input" required value={form.manager_id} onChange={(e) => set('manager_id', e.target.value)}>
+                <option value="" disabled>Select a manager…</option>
+                {orgData.managers.filter((m) => m.id !== employeeId).map((m) =>
+                  <option key={m.id} value={m.id}>{m.full_name}{m.role === 'admin' ? ' (Admin)' : ''}</option>)}
+              </select>
+            </Field>
+          )}
         </div>
         <div className="form-row">
           <Field label="Department">
@@ -347,7 +354,8 @@ export default function Employees() {
                       <td>{e.employee_code}</td>
                       <td>{e.department || '—'}</td>
                       <td>{titleCase(e.role)}</td>
-                      <td>{e.manager_name || '—'}</td>
+                      <td>{e.role === 'admin' ? <span className="help-text">— (Admin)</span>
+                        : e.manager_name || <span className="badge warn">Awaiting onboarding</span>}</td>
                       <td>{e.is_active ? <span className="badge ok">Active</span>
                                         : <span className="badge danger">Inactive</span>}</td>
                       <td>

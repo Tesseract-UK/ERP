@@ -31,6 +31,8 @@ KIND_MODELS = {
 }
 KIND_LABEL = {"leave": "Leave request", "wfh": "WFH request",
               "regularization": "Regularization request"}
+KIND_PHRASE = {"leave": "leave request", "wfh": "WFH request",
+               "regularization": "regularization request"}
 
 
 def load_request(db: Session, kind: str, request_id: int, *, for_update: bool = False):
@@ -46,7 +48,7 @@ def load_request(db: Session, kind: str, request_id: int, *, for_update: bool = 
     return record
 
 
-def heading(kind: str, req) -> str:
+def heading(kind: str, req, *, with_name: bool = True) -> str:
     """Short human title, e.g. 'Leave · Casual · 12 Nov 2026 → 14 Nov 2026 — Asha'."""
     fmt = "%d %b %Y"
     if kind == "leave":
@@ -56,7 +58,7 @@ def heading(kind: str, req) -> str:
         detail = f"Work from home · {req.date:{fmt}}"
     else:
         detail = f"Regularization · {req.date:{fmt}}"
-    return f"{detail} — {req.user.full_name}"
+    return f"{detail} — {req.user.full_name}" if with_name else detail
 
 
 def participant_ids(db: Session, kind: str, request_id: int) -> set[int]:
@@ -239,9 +241,9 @@ def announce_new_request(db: Session, requester: User, kind: str, req,
     manager = requester.manager
     if manager is not None and manager.is_active:
         notify_and_email(
-            db, manager, f"New {KIND_LABEL[kind].lower()}: {requester.full_name}",
+            db, manager, f"New {KIND_PHRASE[kind]}: {requester.full_name}",
             summary, "approval", actor_id=requester.id, entity_type=kind, entity_id=req.id,
-            email_subject=f"{requester.full_name} applied — {title}",
+            email_subject=f"{requester.full_name} applied — {heading(kind, req, with_name=False)}",
             email_body=(
                 f"Hi {manager.full_name},\n\n"
                 f"{requester.full_name} has applied for the following and is waiting for "

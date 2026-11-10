@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { api, API_BASE } from '../api'
+import { api } from '../api'
 import { EmptyState, Field, Pagination, Spinner, fmtDateTime, titleCase, useToast } from '../components/ui'
 import { MessageSquare } from '../components/icons'
 import { useAuth } from '../AuthContext'
@@ -18,7 +18,7 @@ export default function Requests() {
   const [selected, setSelected] = useState(null)
   const [createOpen, setCreateOpen] = useState(false)
   const [busy, setBusy] = useState(false)
-  const [form, setForm] = useState({ title: '', category: 'IT support', otherCategory: '', priority: 'normal', description: '', recipient_ids: [], attachment: null })
+  const [form, setForm] = useState({ title: '', category: 'IT support', otherCategory: '', priority: 'normal', description: '', recipient_ids: [] })
   const [comment, setComment] = useState('')
   const [mentions, setMentions] = useState([])
 
@@ -52,14 +52,13 @@ export default function Requests() {
     const data = new FormData()
     Object.entries({ ...form, category }).forEach(([key, value]) => {
       if (key === 'otherCategory') return
-      if (key === 'attachment') { if (value) data.append(key, value) }
       else data.append(key, key === 'recipient_ids' ? JSON.stringify(value) : value)
     })
     setBusy(true)
     try {
       const item = await api.postForm('/requests', data)
       toast('Request sent', 'success'); setCreateOpen(false)
-      setForm({ title: '', category: 'IT support', otherCategory: '', priority: 'normal', description: '', recipient_ids: [], attachment: null })
+      setForm({ title: '', category: 'IT support', otherCategory: '', priority: 'normal', description: '', recipient_ids: [] })
       await load(); setSelected(item)
     } catch (e) { toast(e.message, 'error') } finally { setBusy(false) }
   }
@@ -95,7 +94,6 @@ export default function Requests() {
 
     {selected && <section className="card"><div className="card-head" style={{ justifyContent: 'space-between' }}><div><h3>{selected.title}</h3><div className="sub">{selected.requester_name} · {selected.category} · {titleCase(selected.status)}</div></div><button className="btn ghost sm" onClick={() => setSelected(null)}>Close</button></div>
       <div className="card-body"><p style={{ whiteSpace: 'pre-wrap' }}>{selected.description}</p>
-        {selected.attachment_path && <p><a href={`${API_BASE}/files/${selected.attachment_path.split(/[\\/]/).map(encodeURIComponent).join('/')}`} target="_blank" rel="noreferrer">Open attachment</a></p>}
         <div style={{ borderTop: '1px solid var(--border)', paddingTop: 10, marginTop: 10 }}><strong>Conversation</strong>
           {(selected.messages || []).map((m) => <div key={m.id} style={{ padding: '10px 0', borderBottom: '1px solid var(--border)' }}><strong>{m.user_name}</strong> <span className="help-text">· {fmtDateTime(m.created_at)} · {titleCase(m.type)}</span><div style={{ whiteSpace: 'pre-wrap' }}>{m.body}</div></div>)}
         </div>
@@ -117,7 +115,6 @@ export default function Requests() {
       {form.category === 'Other' && <Field label="Specify category" required><input className="input" required maxLength={80} value={form.otherCategory} onChange={(e) => setForm({ ...form, otherCategory: e.target.value })} placeholder="Enter another category" /></Field>}
       <Field label="Description" required><textarea className="input" required minLength={3} maxLength={10000} rows={5} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></Field>
       <Field label="Mention people" required help="Choose one to three people. Their role and access are checked again by the server."><select className="input" required multiple value={form.recipient_ids.map(String)} onChange={(e) => setForm({ ...form, recipient_ids: [...e.target.selectedOptions].map((o) => Number(o.value)) })}>{contacts.map((c) => <option key={c.id} value={c.id}>{c.name} ({c.role})</option>)}</select></Field>
-      <Field label="Attachment (optional)"><input className="input" type="file" onChange={(e) => setForm({ ...form, attachment: e.target.files?.[0] || null })} /></Field>
     </div><div className="modal-foot"><button type="button" className="btn secondary" onClick={() => setCreateOpen(false)}>Cancel</button><button className="btn" disabled={busy || form.recipient_ids.length < 1 || form.recipient_ids.length > 3}>{busy ? 'Sending…' : 'Send Request'}</button></div></form></div></div>}
   </div>
 }

@@ -1,0 +1,24 @@
+flowchart LR
+  subgraph Browser
+    UI[React SPA<br/>payroll.tesseractuk.in]
+  end
+  Google[(Google OAuth)]
+  subgraph API[FastAPI · erp-gksp.onrender.com]
+    AUTH[auth / sessions]
+    REQ[leaves · wfh · regularization]
+    APPR[approvals<br/>manager decides, admin override]
+    CONV[conversations<br/>threads + @tags]
+    CAL[company calendar<br/>holidays · company WFH]
+    HR[hr: employees, reporting lines,<br/>policies]
+    MAIL[mailer: queue on session,<br/>send after commit]
+  end
+  DB[(PostgreSQL)]
+  SMTP[(SMTP · notifications@tesseractuk.in)]
+  UI -->|cookie session| API
+  AUTH <--> Google
+  REQ --> CONV
+  APPR --> CONV
+  REQ & APPR & CONV & HR & AUTH --> MAIL
+  CAL -->|announcement| DB
+  API --> DB
+  MAIL -->|EMAIL_BACKEND=smtp| SMTP

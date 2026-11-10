@@ -2,10 +2,13 @@
 // detail, or to quick-apply for Leave/WFH on that date. Below the calendar,
 // track every Leave/WFH request raised for the month shown, with live status.
 import { useCallback, useEffect, useState } from 'react'
-import { api, API_BASE } from '../api'
+import { api } from '../api'
+import { useAuth } from '../AuthContext'
 import MonthCalendar, { MonthNav } from '../components/MonthCalendar'
-import { LeaveApplyForm, WfhApplyForm } from '../components/RequestForms'
-import { EmptyState, Modal, Spinner, StatusBadge, fmtDate, fmtDateTime, titleCase, useToast } from '../components/ui'
+import { ApplyRequestForm, KindBadge } from '../components/RequestForms'
+import { ConversationModal } from '../components/Conversation'
+import OnboardingNotice from '../components/OnboardingNotice'
+import { EmptyState, Modal, Spinner, StatusBadge, fmtDate, titleCase, useToast } from '../components/ui'
 import { CalendarDays } from '../components/icons'
 
 export default function Attendance() {
@@ -17,6 +20,7 @@ export default function Attendance() {
   const [applyType, setApplyType] = useState(null) // 'leave' | 'wfh' | null
   const [selectedRequest, setSelectedRequest] = useState(null)
   const toast = useToast()
+  const { user } = useAuth()
 
   useEffect(() => {
     setData(null)
@@ -46,6 +50,7 @@ export default function Attendance() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <OnboardingNotice compact />
       <div className="card">
         <div className="card-head">
           <h3>Monthly Attendance</h3>
@@ -68,8 +73,7 @@ export default function Attendance() {
         <div className="card-head">
           <h3>Requests — {monthLabel}</h3>
           <div className="toolbar">
-            <button className="btn secondary sm" onClick={() => setApplyType('leave')}>+ Apply for Leave</button>
-            <button className="btn secondary sm" onClick={() => setApplyType('wfh')}>+ Request WFH</button>
+            <button className="btn secondary sm" disabled={!user.can_request} onClick={() => setApplyType('leave')}>+ Apply for Leave / WFH</button>
           </div>
         </div>
         {leaveRows === null || wfhRows === null ? <Spinner /> : monthRequests.length === 0
@@ -80,15 +84,15 @@ export default function Attendance() {
               <thead><tr><th>Type</th><th>Dates</th><th>Reason</th><th>Status</th><th>Reviewed By</th><th>Details</th></tr></thead>
               <tbody>
                 {monthRequests.map((r) => (
-                  <tr key={`${r.kind}-${r.id}`}>
-                    <td>{r.kind === 'leave' ? `${titleCase(r.leave_type)} Leave` : 'Work From Home'}</td>
+                  <tr key={`${r.kind}-${r.id}`} className={`row-${r.kind}`}>
+                    <td><KindBadge kind={r.kind} />{r.kind === 'leave' && <div className="help-text">{titleCase(r.leave_type)}</div>}</td>
                     <td>{r.start_date === r.end_date ? fmtDate(r.start_date)
                                                       : <>{fmtDate(r.start_date)} → {fmtDate(r.end_date)}</>}</td>
                     <td style={{ maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.reason}>{r.reason}</td>
                     <td><StatusBadge status={r.status} />
                       {r.approver_comment && <div className="help-text" title={r.approver_comment}>“{r.approver_comment}”</div>}</td>
                     <td>{r.approver_name || '—'}</td>
-                    <td><button className="btn ghost sm" onClick={() => setSelectedRequest(r)}>View</button></td>
+                    <td><button className="btn ghost sm" onClick={() => setSelectedRequest(r)}>Conversation</button></td>
                   </tr>
                 ))}
               </tbody>
@@ -96,29 +100,14 @@ export default function Attendance() {
           )}
       </div>
 
-      {applyType === 'leave' && (
-        <Modal title="Apply for Leave" onClose={() => setApplyType(null)}>
-          <LeaveApplyForm onCancel={() => setApplyType(null)}
-                          onDone={() => { setApplyType(null); loadRequests() }} />
+      {applyType && (
+        <Modal title="Apply for Leave or WFH" onClose={() => setApplyType(null)}>
+          <ApplyRequestForm initialType={applyType} onCancel={() => setApplyType(null)}
+                            onDone={() => { setApplyType(null); loadRequests() }} />
         </Modal>
       )}
-      {applyType === 'wfh' && (
-        <Modal title="Request Work From Home" onClose={() => setApplyType(null)}>
-          <WfhApplyForm onCancel={() => setApplyType(null)}
-                        onDone={() => { setApplyType(null); loadRequests() }} />
-        </Modal>
-      )}
-      {selectedRequest && <Modal title="Request details" onClose={() => setSelectedRequest(null)}>
-        <p><strong>Type:</strong> {selectedRequest.kind === 'leave' ? `${titleCase(selectedRequest.leave_type)} Leave` : 'Work From Home'}</p>
-        <p><strong>Dates:</strong> {selectedRequest.start_date === selectedRequest.end_date
-          ? fmtDate(selectedRequest.start_date) : `${fmtDate(selectedRequest.start_date)} → ${fmtDate(selectedRequest.end_date)}`}</p>
-        {selectedRequest.days != null && <p><strong>Working days:</strong> {selectedRequest.days}</p>}
-        <p><strong>Reason:</strong> {selectedRequest.reason}</p>
-        <p><strong>Status:</strong> {titleCase(selectedRequest.status)} · <strong>Submitted:</strong> {fmtDateTime(selectedRequest.created_at)}</p>
-        {selectedRequest.approver_name && <p><strong>Reviewed by:</strong> {selectedRequest.approver_name}</p>}
-        {selectedRequest.approver_comment && <p><strong>Decision note:</strong> {selectedRequest.approver_comment}</p>}
-        {selectedRequest.document_path && <p style={{ marginTop: 12 }}><a href={`${API_BASE}/files/${selectedRequest.document_path.split(/[\\/]/).map(encodeURIComponent).join('/')}`} target="_blank" rel="noreferrer">Open supporting document</a></p>}
-      </Modal>}
+      {selectedRequest && <ConversationModal kind={selectedRequest.kind} id={selectedRequest.id}
+                                             onClose={() => setSelectedRequest(null)} onChanged={loadRequests} />}
     </div>
   )
 }

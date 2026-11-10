@@ -79,7 +79,12 @@ export default function Profile() {
         </div>
         <div className="card">
           <div className="card-head"><h3>Financial & Identity</h3><span className="badge neutral">Read-only</span></div>
-          <div className="card-body">
+          {profile.onboarding_pending ? (
+            <div className="card-body">
+              <p className="help-text">HR will record your PAN, Aadhaar, passport and bank details while completing
+                your joining formalities. Nothing is shown here until then.</p>
+            </div>
+          ) : <div className="card-body">
             <ReadRow label="PAN number" value={profile.pan_number} />
             <ReadRow label="Aadhaar number" value={profile.aadhaar_number} />
             <ReadRow label="Passport" value={profile.passport_number} />
@@ -88,7 +93,7 @@ export default function Profile() {
             <p className="help-text" style={{ marginTop: 10 }}>
               Sensitive values are masked. Contact HR to correct any of these details.
             </p>
-          </div>
+          </div>}
         </div>
       </div>
 

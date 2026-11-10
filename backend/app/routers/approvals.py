@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session, aliased
 
 from ..conversations import (
-    KIND_LABEL, KIND_MODELS, app_link, audience, can_decide, heading, load_request,
+    KIND_LABEL, KIND_MODELS, KIND_PHRASE, app_link, audience, can_decide, heading, load_request,
     post_comment,
 )
 from ..database import get_db
@@ -119,11 +119,11 @@ def decide(kind: str, req_id: int, decision: str, body: DecisionRequest,
     title = heading(kind, req)
     notify_and_email(
         db, req.user, f"{label} {verb}",
-        f"Your {label.lower()} was {verb} by {user.full_name}"
+        f"Your {KIND_PHRASE[kind]} was {verb} by {user.full_name}"
         + (f": {body.comment}" if body.comment else ""),
         "approved" if verb == "approved" else "rejected",
         actor_id=user.id, entity_type=kind, entity_id=req.id,
-        email_subject=f"Your {label.lower()} was {verb} — {title}",
+        email_subject=f"Your {KIND_PHRASE[kind]} was {verb} — {heading(kind, req, with_name=False)}",
         email_body=(
             f"Hi {req.user.full_name},\n\nYour request has been {verb} by {user.full_name}.\n\n"
             f"{title}\n" + (f"Comment: {body.comment}\n" if body.comment else "")

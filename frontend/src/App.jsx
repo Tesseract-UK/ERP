@@ -6,11 +6,10 @@ import { Spinner } from './components/ui'
 import Login from './pages/Login'
 import AdminLogin from './pages/AdminLogin'
 import Signup from './pages/Signup'
-import Onboarding from './pages/Onboarding'
 import Dashboard from './pages/Dashboard'
 import Attendance from './pages/Attendance'
 import Leaves from './pages/Leaves'
-import WFH from './pages/WFH'
+import Conversations from './pages/Conversations'
 import Regularization from './pages/Regularization'
 import Profile from './pages/Profile'
 import Approvals from './pages/Approvals'
@@ -25,12 +24,17 @@ import Announcements from './pages/Announcements'
 import Organization from './pages/Organization'
 import AuditLogs from './pages/AuditLogs'
 
-// Login required; admin always passes role checks.
-function Guard({ roles, children }) {
+// Login required; admin always passes role checks unless `noAdmin` is set
+// (Admins have no attendance and never raise leave/WFH/regularization).
+function Guard({ roles, noAdmin, children }) {
   const { user } = useAuth()
 
   if (!user) {
     return <Navigate to="/login" replace />
+  }
+
+  if (noAdmin && user.role === 'admin') {
+    return <Navigate to="/" replace />
   }
 
   if (
@@ -49,11 +53,6 @@ export default function App() {
 
   if (loading) {
     return <Spinner />
-  }
-
-  // New joiners must complete their profile before accessing the app.
-  if (user && user.profile_completed === false) {
-    return <Onboarding />
   }
 
   return (
@@ -75,17 +74,18 @@ export default function App() {
 
       <Route element={<Guard><Layout /></Guard>}>
         <Route path="/" element={<Dashboard />} />
-        <Route path="/attendance" element={<Attendance />} />
-        <Route path="/leaves" element={<Leaves />} />
-        <Route path="/wfh" element={<WFH />} />
-        <Route path="/regularization" element={<Regularization />} />
+        <Route path="/attendance" element={<Guard noAdmin><Attendance /></Guard>} />
+        <Route path="/leaves" element={<Guard noAdmin><Leaves /></Guard>} />
+        <Route path="/wfh" element={<Navigate to="/leaves" replace />} />
+        <Route path="/regularization" element={<Guard noAdmin><Regularization /></Guard>} />
+        <Route path="/conversations" element={<Conversations />} />
         <Route path="/profile" element={<Profile />} />
         <Route path="/requests" element={<Requests />} />
 
         <Route
           path="/approvals"
           element={
-            <Guard roles={['manager', 'hr']}>
+            <Guard roles={['manager']}>
               <Approvals />
             </Guard>
           }

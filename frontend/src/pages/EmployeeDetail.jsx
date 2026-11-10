@@ -1,87 +1,20 @@
-// Admin/HR: single employee's full picture — calendar, every request with
-// approve/reject authority, and reporting-line management (assign/remove
-// their manager, and if they're a manager themselves, manage who reports
-// to them).
+// Admin/HR: single employee's full picture — calendar, every request, and
+// reporting-line management. Assigning a manager is the step that completes a
+// new joiner's onboarding. Only an Admin can approve/reject here (override);
+// the employee's own manager decides from Approvals.
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { API_BASE, api } from '../api'
+import { api } from '../api'
 import { useAuth } from '../AuthContext'
 import MonthCalendar, { MonthNav } from '../components/MonthCalendar'
 import {
   EmptyState, Field, Modal, NumberInput, Spinner, StatusBadge, fmtDate, fmtDateTime, fmtTime, titleCase, useToast,
 } from '../components/ui'
-import { CalendarDays, IdCard, Users } from '../components/icons'
+import { CalendarDays, Users } from '../components/icons'
+import { KindBadge } from '../components/RequestForms'
+import { ConversationModal, DecisionFlow } from '../components/Conversation'
 
-const KIND_LABEL = { leave: 'Leave', wfh: 'Work From Home', regularization: 'Regularization' }
 const ALLOCATION_TYPES = ['casual', 'sick', 'earned', 'maternity', 'paternity', 'optional_holiday', 'wfh']
-
-function EmployeeDocumentsCard({ employeeId }) {
-  const toast = useToast()
-  const [documents, setDocuments] = useState(null)
-  const [name, setName] = useState('')
-  const [file, setFile] = useState(null)
-  const [busy, setBusy] = useState(false)
-
-  const load = useCallback(() => {
-    api.get(`/hr/employees/${employeeId}/documents`)
-      .then(setDocuments)
-      .catch((error) => toast(error.message, 'error'))
-  }, [employeeId, toast])
-  useEffect(load, [load])
-
-  const upload = async (event) => {
-    event.preventDefault()
-    if (!file) return
-    const form = event.currentTarget
-    const formData = new FormData()
-    formData.append('name', name)
-    formData.append('file', file)
-    setBusy(true)
-    try {
-      await api.postForm(`/hr/employees/${employeeId}/documents`, formData)
-      toast('Employee document uploaded', 'success')
-      setName('')
-      setFile(null)
-      form.reset()
-      load()
-    } catch (error) {
-      toast(error.message, 'error')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  return (
-    <div className="card">
-      <div className="card-head"><h3>Employee Documents</h3></div>
-      <div className="card-body">
-        <form className="toolbar" onSubmit={upload} style={{ alignItems: 'end', marginBottom: 14 }}>
-          <Field label="Document name" required>
-            <input className="input" required maxLength={150} value={name} onChange={(event) => setName(event.target.value)} />
-          </Field>
-          <Field label="File (PDF, image, or Office document)" required>
-            <input className="input" required type="file" accept=".pdf,.png,.jpg,.jpeg,.doc,.docx"
-              onChange={(event) => setFile(event.target.files?.[0] || null)} />
-          </Field>
-          <button className="btn secondary" disabled={busy || !file}>{busy ? 'Uploading…' : 'Upload'}</button>
-        </form>
-        {documents === null ? <Spinner /> : documents.length === 0
-          ? <EmptyState icon={IdCard} title="No employee documents" />
-          : <div className="table-wrap"><table className="table">
-            <thead><tr><th>Document</th><th>Uploaded</th><th>File</th></tr></thead>
-            <tbody>{documents.map((document) => {
-              const path = document.file_path.split('/').map(encodeURIComponent).join('/')
-              return <tr key={document.id}>
-                <td>{document.name}</td>
-                <td>{fmtDate(document.created_at)}</td>
-                <td><a href={`${API_BASE}/files/${path}`} target="_blank" rel="noreferrer">Open securely</a></td>
-              </tr>
-            })}</tbody>
-          </table></div>}
-      </div>
-    </div>
-  )
-}
 
 function AttendanceCorrectionCard({ employee, onSaved }) {
   const toast = useToast()
@@ -204,47 +137,6 @@ function AllocationsCard({ employeeId }) {
   )
 }
 
-function DecisionModal({ item, decision, onClose, onDone }) {
-  const toast = useToast()
-  const [comment, setComment] = useState('')
-  const [busy, setBusy] = useState(false)
-
-  const submit = async () => {
-    setBusy(true)
-    try {
-      await api.post(`/approvals/${item.kind}/${item.id}/${decision}`, { comment: comment || null })
-      toast(`Request ${decision === 'approve' ? 'approved' : 'rejected'}`, 'success')
-      onDone()
-    } catch (err) {
-      toast(err.message, 'error')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const label = item.kind === 'leave' ? `${titleCase(item.leave_type)} Leave` : KIND_LABEL[item.kind]
-
-  return (
-    <Modal title={`${decision === 'approve' ? 'Approve' : 'Reject'} ${label} request`}
-           onClose={onClose} footer={
-      <>
-        <button className="btn secondary" onClick={onClose} disabled={busy}>Cancel</button>
-        <button className={`btn ${decision === 'approve' ? 'success' : 'danger'}`}
-                onClick={submit} disabled={busy}>
-          {busy ? 'Working…' : decision === 'approve' ? 'Approve' : 'Reject'}
-        </button>
-      </>
-    }>
-      <p style={{ marginBottom: 12, color: 'var(--ink-2)' }}>Reason: “{item.reason}”</p>
-      {item.document_path && <p style={{ marginBottom: 12 }}><a href={`${API_BASE}/files/${item.document_path.split(/[\\/]/).map(encodeURIComponent).join('/')}`} target="_blank" rel="noreferrer">Open supporting document</a></p>}
-      <Field label="Comment (optional)" help="Stored with the request for future reference">
-        <textarea className="input" value={comment} onChange={(e) => setComment(e.target.value)}
-                  placeholder="Add a note for the employee…" />
-      </Field>
-    </Modal>
-  )
-}
-
 function AddReportModal({ managerId, onClose, onDone }) {
   const toast = useToast()
   const [candidates, setCandidates] = useState(null)
@@ -343,19 +235,9 @@ export default function EmployeeDetail() {
     }
   }
 
-  const removeReport = async (reportId, name) => {
-    try {
-      await api.post(`/hr/employees/${reportId}/set-manager`, { manager_id: null })
-      toast(`${name} removed from this manager`, 'success')
-      loadReports()
-    } catch (err) {
-      toast(err.message, 'error')
-    }
-  }
-
   if (!emp) return <Spinner />
 
-  const canHaveReports = ['manager', 'hr', 'admin'].includes(emp.role)
+  const canHaveReports = ['manager', 'admin'].includes(emp.role)
   const managers = (orgData?.managers || []).filter((m) => m.id !== emp.id)
 
   return (
@@ -363,7 +245,8 @@ export default function EmployeeDetail() {
       <div className="page-head" style={{ marginBottom: 0 }}>
         <div>
           <h2>{emp.full_name}</h2>
-          <div className="sub">{emp.employee_code} · {titleCase(emp.role)} · {emp.department || 'No department'}</div>
+          <div className="sub">{emp.employee_code} · {titleCase(emp.role)} · {emp.department || 'No department'}
+            {emp.onboarding_pending && <> · <span className="badge warn">Awaiting onboarding</span></>}</div>
         </div>
         <Link to="/employees" className="btn secondary sm">← Back to Employees</Link>
       </div>
@@ -371,23 +254,28 @@ export default function EmployeeDetail() {
       <div className="grid cols-2">
         <div className="card pad">
           <div style={{ fontWeight: 600, marginBottom: 12 }}>Reporting Manager</div>
-          <div className="form-row" style={{ alignItems: 'end', marginBottom: 0 }}>
-            <Field label="Manager">
-              <select className="input" value={managerPick} onChange={(e) => setManagerPick(e.target.value)}>
-                <option value="">— None —</option>
-                {managers.map((m) => <option key={m.id} value={m.id}>{m.full_name}</option>)}
-              </select>
-            </Field>
-            <div className="toolbar" style={{ marginBottom: 14 }}>
-              <button className="btn secondary sm" onClick={() => changeManager(managerPick)}>
-                {emp.manager_id ? 'Update' : 'Assign'}
-              </button>
-              {emp.manager_id && (
-                <button className="btn ghost sm" style={{ color: 'var(--danger)' }}
-                        onClick={() => changeManager(null)}>Remove</button>
-              )}
+          {emp.role === 'admin' ? (
+            <p className="help-text">Admins don't report to anyone.</p>
+          ) : <>
+            {emp.onboarding_pending && <div className="notice" style={{ marginBottom: 12 }}>
+              <strong>Onboarding pending.</strong> Complete their details below and assign a manager —
+              that unlocks their leave, WFH and regularization requests and notifies them.
+            </div>}
+            <div className="form-row" style={{ alignItems: 'end', marginBottom: 0 }}>
+              <Field label="Manager" required>
+                <select className="input" value={managerPick} onChange={(e) => setManagerPick(e.target.value)}>
+                  <option value="" disabled>Select a manager…</option>
+                  {managers.map((m) => <option key={m.id} value={m.id}>{m.full_name}{m.role === 'admin' ? ' (Admin)' : ''}</option>)}
+                </select>
+              </Field>
+              <div className="toolbar" style={{ marginBottom: 14 }}>
+                <button className="btn secondary sm" disabled={!managerPick || String(managerPick) === String(emp.manager_id)}
+                        onClick={() => changeManager(managerPick)}>
+                  {emp.manager_id ? 'Change manager' : 'Assign & complete onboarding'}
+                </button>
+              </div>
             </div>
-          </div>
+          </>}
         </div>
 
         {canHaveReports && (
@@ -404,8 +292,7 @@ export default function EmployeeDetail() {
                       <Link to={`/employees/${r.id}`}>{r.full_name}</Link>
                       <div className="help-text">{r.employee_code}</div>
                     </div>
-                    <button className="btn ghost sm" style={{ color: 'var(--danger)' }}
-                            onClick={() => removeReport(r.id, r.full_name)}>Remove</button>
+
                   </div>
                 ))}
             </div>
@@ -414,8 +301,6 @@ export default function EmployeeDetail() {
       </div>
 
       <AllocationsCard employeeId={Number(id)} />
-
-      <EmployeeDocumentsCard employeeId={Number(id)} />
 
       {user.role === 'admin' && <AttendanceCorrectionCard employee={emp} onSaved={(record) => {
         setCalData((current) => current ? {
@@ -448,16 +333,16 @@ export default function EmployeeDetail() {
                   const start = r.start_date || r.date
                   const end = r.end_date || r.date
                   return (
-                    <tr key={`${r.kind}-${r.id}`}>
-                      <td>{r.kind === 'leave' ? `${titleCase(r.leave_type)} Leave` : KIND_LABEL[r.kind]}</td>
+                    <tr key={`${r.kind}-${r.id}`} className={`row-${r.kind}`}>
+                      <td><KindBadge kind={r.kind} />{r.kind === 'leave' && <div className="help-text">{titleCase(r.leave_type)}</div>}</td>
                       <td>{start === end ? fmtDate(start) : <>{fmtDate(start)} → {fmtDate(end)}</>}</td>
                       <td style={{ maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.reason}>{r.reason}</td>
                       <td><StatusBadge status={r.status} />
                         {r.approver_comment && <div className="help-text" title={r.approver_comment}>“{r.approver_comment}”</div>}</td>
                       <td>{r.approver_name || '—'}</td>
                       <td><div className="toolbar" style={{ gap: 6 }}>
-                          <button className="btn ghost sm" onClick={() => setSelectedRequest(r)}>View</button>
-                          {r.status === 'pending' && <>
+                          <button className="btn ghost sm" onClick={() => setSelectedRequest(r)}>{user.role === 'admin' ? 'Conversation' : 'View'}</button>
+                          {r.status === 'pending' && user.role === 'admin' && <>
                           <button className="btn success sm" onClick={() => setDecision({ item: r, decision: 'approve' })}>Approve</button>
                           <button className="btn danger sm" onClick={() => setDecision({ item: r, decision: 'reject' })}>Reject</button>
                           </>}
@@ -475,13 +360,17 @@ export default function EmployeeDetail() {
                         onDone={() => { setShowAddReport(false); loadReports() }} />
       )}
       {decision && (
-        <DecisionModal item={decision.item} decision={decision.decision}
-                       onClose={() => setDecision(null)}
-                       onDone={() => { setDecision(null); loadRequests() }} />
+        <DecisionFlow request={{ ...decision.item, user: emp }} decision={decision.decision}
+                      onClose={() => setDecision(null)}
+                      onDone={() => { setDecision(null); loadRequests() }} />
       )}
-      {selectedRequest && <Modal title="Request details" onClose={() => setSelectedRequest(null)}>
+      {selectedRequest && user.role === 'admin' && (
+        <ConversationModal kind={selectedRequest.kind} id={selectedRequest.id}
+                           onClose={() => setSelectedRequest(null)} onChanged={loadRequests} />
+      )}
+      {selectedRequest && user.role !== 'admin' && <Modal title="Request details" onClose={() => setSelectedRequest(null)}>
         <p><strong>Employee:</strong> {emp.full_name} ({emp.employee_code})</p>
-        <p><strong>Type:</strong> {selectedRequest.kind === 'leave' ? `${titleCase(selectedRequest.leave_type)} Leave` : KIND_LABEL[selectedRequest.kind]}</p>
+        <p><strong>Type:</strong> <KindBadge kind={selectedRequest.kind} /> {selectedRequest.kind === 'leave' && titleCase(selectedRequest.leave_type)}</p>
         <p><strong>Date:</strong> {selectedRequest.start_date
           ? `${fmtDate(selectedRequest.start_date)} → ${fmtDate(selectedRequest.end_date)}`
           : fmtDate(selectedRequest.date)}</p>
@@ -489,18 +378,9 @@ export default function EmployeeDetail() {
         {selectedRequest.requested_check_in && <p><strong>Corrected check-in:</strong> {fmtTime(selectedRequest.requested_check_in)}</p>}
         {selectedRequest.requested_check_out && <p><strong>Corrected check-out:</strong> {fmtTime(selectedRequest.requested_check_out)}</p>}
         <p><strong>Reason:</strong> {selectedRequest.reason}</p>
-        <p><strong>Status:</strong> {titleCase(selectedRequest.status)} · {titleCase(selectedRequest.approval_stage)}</p>
+        <p><strong>Status:</strong> {titleCase(selectedRequest.status)}{selectedRequest.approver_name ? ` · decided by ${selectedRequest.approver_name}` : ''}</p>
         <p><strong>Submitted:</strong> {fmtDateTime(selectedRequest.created_at)}{selectedRequest.decided_at ? ` · Decided ${fmtDateTime(selectedRequest.decided_at)}` : ''}</p>
-        <p><strong>Manager decision:</strong> {selectedRequest.manager_decided_at
-          ? `${selectedRequest.manager_approver_name || 'Manager'} ${selectedRequest.manager_comment ? `· ${selectedRequest.manager_comment} ` : ''}· ${fmtDateTime(selectedRequest.manager_decided_at)}`
-          : 'Pending / not required'}</p>
-        <p><strong>HR decision:</strong> {selectedRequest.hr_decided_at
-          ? `${selectedRequest.hr_comment ? `${selectedRequest.hr_comment} · ` : ''}${fmtDateTime(selectedRequest.hr_decided_at)}`
-          : 'Pending / not required'}</p>
-        {selectedRequest.manager_comment && <p><strong>Manager comment:</strong> {selectedRequest.manager_comment}</p>}
-        {selectedRequest.hr_comment && <p><strong>HR comment:</strong> {selectedRequest.hr_comment}</p>}
         {selectedRequest.approver_comment && <p><strong>Decision note:</strong> {selectedRequest.approver_comment}</p>}
-        {selectedRequest.document_path && <p style={{ marginTop: 12 }}><a href={`${API_BASE}/files/${selectedRequest.document_path.split(/[\\/]/).map(encodeURIComponent).join('/')}`} target="_blank" rel="noreferrer">Open supporting document</a></p>}
       </Modal>}
     </div>
   )

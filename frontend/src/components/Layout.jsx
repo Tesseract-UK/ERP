@@ -1,11 +1,12 @@
 // App shell: sidebar navigation, topbar with notifications, role-aware menu.
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
-import { api, API_BASE } from '../api'
+import { api } from '../api'
 import { useAuth } from '../AuthContext'
-import { fmtDate, fmtDateTime, fmtTime, initials, Modal, titleCase, useToast } from './ui'
+import { ConversationList, ConversationModal } from './Conversation'
+import { fmtDateTime, initials, Modal, titleCase, useToast } from './ui'
 import {
-  LayoutDashboard, Clock, Plane, Home, PenLine, User, CheckSquare, Users,
+  LayoutDashboard, Clock, Plane, PenLine, User, CheckSquare, Users,
   CalendarDays, IdCard, ClipboardList, BarChart3, Megaphone, Building2,
   ShieldCheck, Bell, Menu, Logo, MessageSquare,
 } from './icons'
@@ -13,21 +14,21 @@ import {
 const NAV = [
   { section: 'My Workspace', items: [
     { to: '/', label: 'Dashboard', icon: LayoutDashboard },
-    { to: '/attendance', label: 'Attendance', icon: Clock },
-    { to: '/leaves', label: 'Leaves', icon: Plane },
-    { to: '/wfh', label: 'Work From Home', icon: Home },
-    { to: '/regularization', label: 'Regularization', icon: PenLine },
-    { to: '/requests', label: 'Requests', icon: MessageSquare },
+    { to: '/attendance', label: 'Attendance', icon: Clock, hideFor: ['admin'] },
+    { to: '/leaves', label: 'Leave & WFH', icon: Plane, hideFor: ['admin'] },
+    { to: '/regularization', label: 'Regularization', icon: PenLine, hideFor: ['admin'] },
+    { to: '/conversations', label: 'Conversations', icon: MessageSquare },
+    { to: '/requests', label: 'Help Requests', icon: MessageSquare },
     { to: '/profile', label: 'My Profile', icon: User },
   ]},
   { section: 'Team', roles: ['manager', 'hr', 'admin'], items: [
-    { to: '/approvals', label: 'Approvals', icon: CheckSquare },
+    { to: '/approvals', label: 'Approvals', icon: CheckSquare, roles: ['manager', 'admin'] },
     { to: '/team', label: 'Team Attendance', icon: Users },
     { to: '/team-calendar', label: 'Team Calendar', icon: CalendarDays },
   ]},
   { section: 'HR', roles: ['hr', 'admin'], items: [
     { to: '/employees', label: 'Employees', icon: IdCard },
-    { to: '/policies', label: 'Policies & Holidays', icon: ClipboardList },
+    { to: '/policies', label: 'Policies & Calendar', icon: ClipboardList },
     { to: '/reports', label: 'Reports', icon: BarChart3 },
     { to: '/announcements', label: 'Announcements', icon: Megaphone },
   ]},
@@ -38,20 +39,26 @@ const NAV = [
 ]
 
 const TITLES = {
-  '/': 'Dashboard', '/attendance': 'Attendance', '/leaves': 'Leave Management',
-  '/wfh': 'Work From Home', '/regularization': 'Attendance Regularization',
-  '/profile': 'My Profile', '/requests': 'Employee Requests', '/approvals': 'Approvals', '/team': 'Team Attendance',
+  '/': 'Dashboard', '/attendance': 'Attendance', '/leaves': 'Leave & Work From Home',
+  '/regularization': 'Attendance Regularization', '/conversations': 'Conversations',
+  '/profile': 'My Profile', '/requests': 'Help Requests', '/approvals': 'Approvals', '/team': 'Team Attendance',
   '/team-calendar': 'Team Calendar', '/employees': 'Employee Management',
-  '/policies': 'Policies & Holidays', '/reports': 'Reports',
+  '/policies': 'Policies & Company Calendar', '/reports': 'Reports',
   '/announcements': 'Announcements', '/organization': 'Organization Settings',
   '/audit-logs': 'Audit Logs',
 }
 
+const visibleFor = (entry, role) => (!entry.roles || entry.roles.includes(role))
+  && !(entry.hideFor || []).includes(role)
+
 function NotificationCenter() {
   const toast = useToast()
+  const { user } = useAuth()
   const [open, setOpen] = useState(false)
+  const [tab, setTab] = useState('notifications')
   const [data, setData] = useState({ unread: 0, items: [] })
   const [selected, setSelected] = useState(null)
+  const [conversation, setConversation] = useState(null) // { kind, id, reload }
 
   const load = () => api.get('/notifications').then(setData).catch(() => {})
   useEffect(() => {
@@ -70,17 +77,18 @@ function NotificationCenter() {
       const detail = await api.get(`/notifications/${notification.id}`)
       if (!notification.is_read) await api.post(`/notifications/${notification.id}/read`)
       setOpen(false)
-      setSelected(detail)
+      if (detail.conversation) setConversation({ kind: detail.conversation.kind, id: detail.conversation.id })
+      else setSelected(detail)
       load()
     } catch (error) { toast(error.message, 'error') }
   }
 
-  const request = selected?.request
-  const documentPath = request?.document_path || request?.attachment_path
-  const documentUrl = documentPath
-    ? `${API_BASE}/files/${documentPath.split(/[\\/]/).map(encodeURIComponent).join('/')}`
-    : null
+  const openConversation = (kind, id, reload) => {
+    setOpen(false)
+    setConversation({ kind, id, reload })
+  }
 
+  const request = selected?.request
   return (
     <>
       <button type="button" className="sidebar-notifications" onClick={() => setOpen(true)}>
@@ -89,20 +97,30 @@ function NotificationCenter() {
         {data.unread > 0 && <span className="nav-count">{data.unread > 99 ? '99+' : data.unread}</span>}
       </button>
       {open && <Modal title="Notifications" wide onClose={() => setOpen(false)} footer={
-        data.unread > 0 ? <button className="btn ghost sm" onClick={markAll}>Mark all read</button> : null
+        tab === 'notifications' && data.unread > 0 ? <button className="btn ghost sm" onClick={markAll}>Mark all read</button> : null
       }>
-        <div className="notification-list">
-          {data.items.length === 0 && <div className="notif-item">You're all caught up</div>}
-          {data.items.map((n) => (
-            <button type="button" key={n.id} className={`notif-item${n.is_read ? '' : ' unread'}`}
-              onClick={() => openNotification(n)}>
-              <div className="t">{n.title}</div>
-              {n.body && <div className="b">{n.body}</div>}
-              <div className="time">{n.actor_name ? `${n.kind === 'announcement' ? 'Announced by' : 'From'} ${n.actor_name} · ` : ''}{fmtDateTime(n.created_at)}</div>
-            </button>
-          ))}
+        <div className="tabs">
+          <button className={`btn sm ${tab === 'notifications' ? '' : 'secondary'}`} onClick={() => setTab('notifications')}>
+            Notifications{data.unread > 0 ? ` (${data.unread})` : ''}</button>
+          <button className={`btn sm ${tab === 'mine' ? '' : 'secondary'}`} onClick={() => setTab('mine')}>My conversations</button>
+          {user.role === 'admin' && <button className={`btn sm ${tab === 'all' ? '' : 'secondary'}`} onClick={() => setTab('all')}>All conversations</button>}
         </div>
+        {tab === 'notifications' ? (
+          <div className="notification-list">
+            {data.items.length === 0 && <div className="notif-item">You're all caught up</div>}
+            {data.items.map((n) => (
+              <button type="button" key={n.id} className={`notif-item${n.is_read ? '' : ' unread'}`}
+                onClick={() => openNotification(n)}>
+                <div className="t">{n.kind === 'mention' && <span className="badge info" style={{ marginRight: 6 }}>Tagged</span>}{n.title}</div>
+                {n.body && <div className="b">{n.body}</div>}
+                <div className="time">{n.actor_name ? `${n.kind === 'announcement' ? 'Announced by' : 'From'} ${n.actor_name} · ` : ''}{fmtDateTime(n.created_at)}</div>
+              </button>
+            ))}
+          </div>
+        ) : <ConversationList key={tab} scope={tab} compact onOpen={openConversation} />}
       </Modal>}
+      {conversation && <ConversationModal kind={conversation.kind} id={conversation.id}
+        onClose={() => { conversation.reload?.(); setConversation(null) }} onChanged={load} />}
       {selected && <Modal title={selected.announcement?.title || selected.title} onClose={() => setSelected(null)}>
         <div className="help-text" style={{ marginBottom: 12 }}>
           {selected.announcement
@@ -111,23 +129,14 @@ function NotificationCenter() {
         </div>
         {(selected.announcement?.body || selected.body) && <p style={{ whiteSpace: 'pre-wrap', marginBottom: 14 }}>{selected.announcement?.body || selected.body}</p>}
         {request && <div className="card-body" style={{ padding: 12, border: '1px solid var(--border)', borderRadius: 8 }}>
-          {request.user && <p><strong>Employee:</strong> {request.user.full_name} ({request.user.employee_code})</p>}
           {request.requester_name && <p><strong>Requester:</strong> {request.requester_name} · {titleCase(request.category)} · {titleCase(request.priority)}</p>}
           {request.title && <p><strong>Request:</strong> {request.title}</p>}
-          {request.kind === 'leave' && <p><strong>Leave:</strong> {titleCase(request.leave_type)} · {fmtDate(request.start_date)} to {fmtDate(request.end_date)} · {request.days} day(s)</p>}
-          {request.kind === 'wfh' && <p><strong>WFH date:</strong> {fmtDate(request.date)}</p>}
-          {request.kind === 'regularization' && <p><strong>Correction date:</strong> {fmtDate(request.date)} · In {fmtTime(request.requested_check_in)} · Out {fmtTime(request.requested_check_out)}</p>}
-          <p><strong>{request.description ? 'Description' : 'Reason'}:</strong> {request.reason || request.description || '—'}</p>
-          <p><strong>Status:</strong> {titleCase(request.status)}{request.approval_stage ? <> · <strong>Stage:</strong> {titleCase(request.approval_stage)}</> : null}</p>
-          <p><strong>Submitted:</strong> {fmtDateTime(request.created_at)}{request.decided_at ? ` · Decided ${fmtDateTime(request.decided_at)}` : ''}</p>
-          {request.manager_comment && <p><strong>Manager comment:</strong> {request.manager_comment}</p>}
-          {request.hr_comment && <p><strong>HR comment:</strong> {request.hr_comment}</p>}
-          {request.approver_comment && <p><strong>Decision comment:</strong> {request.approver_comment}</p>}
-          {documentUrl && <p style={{ marginTop: 12 }}><a href={documentUrl} target="_blank" rel="noreferrer">Open supporting document</a></p>}
+          <p><strong>Description:</strong> {request.description || '—'}</p>
+          <p><strong>Status:</strong> {titleCase(request.status)}</p>
           {request.messages?.length > 0 && <div style={{ marginTop: 14 }}><strong>Conversation</strong>{request.messages.map((message) =>
             <p key={message.id} className="help-text" style={{ marginTop: 8 }}><strong>{message.user_name}</strong> · {fmtDateTime(message.created_at)}<br />{message.body}</p>)}</div>}
         </div>}
-        {selected.details_unavailable && <p className="help-text">The linked request is no longer available.</p>}
+        {selected.details_unavailable && <p className="help-text">The linked item is no longer available to you.</p>}
       </Modal>}
     </>
   )
@@ -146,10 +155,10 @@ export default function Layout() {
       <aside className={`sidebar${menuOpen ? ' open' : ''}`}>
         <div className="logo"><Logo size={22} /><span>Tesseract HRMS</span></div>
         <nav>
-          {NAV.filter((s) => !s.roles || s.roles.includes(user.role)).map((s) => (
+          {NAV.filter((s) => visibleFor(s, user.role)).map((s) => (
             <div key={s.section}>
               <div className="nav-section">{s.section}</div>
-              {s.items.map((i) => (
+              {s.items.filter((i) => visibleFor(i, user.role)).map((i) => (
                 <NavLink key={i.to} to={i.to} end={i.to === '/'}>
                   <span className="icon"><i.icon size={16} strokeWidth={1.8} /></span>{i.label}
                 </NavLink>

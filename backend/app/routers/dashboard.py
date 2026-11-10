@@ -10,7 +10,7 @@ from ..database import get_db
 from ..deps import get_current_user
 from ..attendance_location import attendance_now, get_geofence_settings
 from ..models import (
-    Announcement, Attendance, EmployeeRequest, Holiday, LeaveRequest, RegularizationRequest,
+    Announcement, Attendance, CompanyWFHDay, EmployeeRequest, Holiday, LeaveRequest, RegularizationRequest,
     User, WFHRequest,
 )
 from ..serializers import announcement_out, attendance_out, holiday_out, user_brief
@@ -20,16 +20,20 @@ router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
 
 def _pending_counts(db: Session, user: User) -> dict:
+    """The user's own open requests, plus what is waiting on their decision."""
     counts = {}
+    awaiting_review = 0
     for key, model in [("leave", LeaveRequest), ("wfh", WFHRequest),
                        ("regularization", RegularizationRequest)]:
-        q = db.query(func.count(model.id)).filter(model.status == "pending")
-        if user.role == "manager":
-            q = q.join(User, model.user_id == User.id).filter(User.manager_id == user.id)
-        elif user.role == "employee":
-            q = q.filter(model.user_id == user.id)
-        counts[key] = q.scalar() or 0
+        counts[key] = db.query(func.count(model.id)).filter(
+            model.status == "pending", model.user_id == user.id).scalar() or 0
+        review = db.query(func.count(model.id)).join(User, model.user_id == User.id).filter(
+            model.status == "pending", model.user_id != user.id)
+        if user.role != "admin":
+            review = review.filter(User.manager_id == user.id)
+        awaiting_review += review.scalar() or 0
     counts["total"] = sum(counts.values())
+    counts["awaiting_my_review"] = awaiting_review
     counts["employee_request"] = db.query(func.count(EmployeeRequest.id)).filter(
         EmployeeRequest.requester_id == user.id,
         EmployeeRequest.status.in_(["open", "in_progress"]),
@@ -98,6 +102,12 @@ def dashboard(user: User = Depends(get_current_user), db: Session = Depends(get_
         "balances": compute_balances(db, user.id),
         "pending_requests": _pending_counts(db, user),
         "upcoming_holidays": [holiday_out(h) for h in holidays],
+        "upcoming_company_wfh": [
+            {"id": d.id, "date": d.date.isoformat(), "note": d.note}
+            for d in db.query(CompanyWFHDay).filter(CompanyWFHDay.date >= today,
+                                                     CompanyWFHDay.date <= in_30)
+            .order_by(CompanyWFHDay.date).limit(5).all()
+        ],
         "birthdays": upcoming_bdays[:8],
         "announcements": [announcement_out(a) for a in announcements],
     }
@@ -112,5 +122,9 @@ def dashboard(user: User = Depends(get_current_user), db: Session = Depends(get_
         payload["organization"] = _team_snapshot(db, all_ids)
         payload["recent_employees"] = [
             user_brief(u) for u in db.query(User).order_by(User.created_at.desc()).limit(5).all()]
+        payload["pending_onboarding"] = [
+            user_brief(u) for u in db.query(User).filter(
+                User.is_active.is_(True), User.role != "admin", User.manager_id.is_(None)
+            ).order_by(User.created_at.desc()).limit(20).all()]
 
     return payload

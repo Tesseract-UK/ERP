@@ -114,12 +114,14 @@ def list_employees(
     if manager_id:
         q = q.filter(User.manager_id == manager_id)
     if unassigned:
-        q = q.filter(User.manager_id.is_(None))
+        # Admins never have a manager, so they are never "unassigned".
+        q = q.filter(User.manager_id.is_(None), User.role != "admin")
     total = q.count()
     rows = q.order_by(User.full_name).offset((page - 1) * page_size).limit(page_size).all()
     return {"total": total, "page": page, "page_size": page_size,
             "items": [{**user_brief(u), "is_active": u.is_active,
-                       "manager_name": u.manager.full_name if u.manager else None}
+                       "manager_name": u.manager.full_name if u.manager else None,
+                       "onboarding_pending": u.role != "admin" and u.manager_id is None}
                       for u in rows]}
 
 

@@ -7,6 +7,7 @@ import {
   EmptyState, Spinner, StatusBadge, fmtDate, fmtHours, fmtTime, titleCase, useToast,
 } from '../components/ui'
 import { AlertTriangle, ArrowRight, Cake, CalendarDays, Megaphone } from '../components/icons'
+import OnboardingNotice from '../components/OnboardingNotice'
 
 function Stat({ label, value, sub, danger }) {
   return (
@@ -208,6 +209,7 @@ export default function Dashboard() {
   const bal = data.balances
   const leaveRemaining = ['casual', 'sick', 'earned'].reduce((s, k) => s + (bal[k]?.remaining || 0), 0)
   const org = data.organization || data.team
+  const isAdmin = user.role === 'admin'
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -219,15 +221,26 @@ export default function Dashboard() {
         {att && <StatusBadge status={att.status} />}
       </div>
 
-      <CheckInPanel
+      <OnboardingNotice />
+
+      {!isAdmin && <CheckInPanel
         att={att}
         onRefresh={load}
         workedHours={workedHours}
         maxGpsAccuracyMeters={data.location_policy?.max_gps_accuracy_meters ?? 500}
         recheckInSeconds={data.recheck_in_seconds ?? 0}
-      />
+      />}
 
-      <div className="grid cols-4">
+      {isAdmin && <div className="grid cols-4">
+        <Stat label="Awaiting Decision" value={data.pending_requests.awaiting_my_review}
+              sub="Leave, WFH & regularization (Admin override)" />
+        <Stat label="Awaiting Onboarding" value={data.pending_onboarding?.length ?? 0}
+              sub="New joiners without a manager" />
+        <Stat label="Upcoming Holidays" value={data.upcoming_holidays.length} sub="Next 30 days" />
+        <Stat label="Company WFH Days" value={data.upcoming_company_wfh?.length ?? 0} sub="Next 30 days" />
+      </div>}
+
+      {!isAdmin && <div className="grid cols-4">
         <Stat label="Leave Balance" value={leaveRemaining}
               sub={`Casual ${bal.casual.remaining} · Sick ${bal.sick.remaining} · Earned ${bal.earned.remaining}`} />
         <Stat label="WFH Balance" value={bal.wfh.remaining} danger={bal.wfh.remaining < 0}
@@ -236,12 +249,27 @@ export default function Dashboard() {
               sub={`Leave ${data.pending_requests.leave} · WFH ${data.pending_requests.wfh} · Reg. ${data.pending_requests.regularization} · Other ${data.pending_requests.employee_request || 0}`} />
         <Stat label="Hours Today" value={fmtHours(workedHours)}
               sub={att?.overtime_hours > 0 ? `+${fmtHours(att.overtime_hours)} overtime` : 'Standard day: 8h'} />
-      </div>
+      </div>}
+
+      {data.pending_onboarding?.length > 0 && (
+        <div className="card">
+          <div className="card-head"><h3>New Joiners Awaiting Onboarding</h3></div>
+          <div className="table-wrap"><table className="table">
+            <thead><tr><th>Name</th><th>Email</th><th></th></tr></thead>
+            <tbody>
+              {data.pending_onboarding.map((e) => (
+                <tr key={e.id}><td>{e.full_name}</td><td>{e.email}</td>
+                  <td><Link className="btn secondary sm" to={`/employees/${e.id}`}>Complete onboarding</Link></td></tr>
+              ))}
+            </tbody>
+          </table></div>
+        </div>
+      )}
 
       {org && (
         <div className="card">
           <div className="card-head"><h3>{data.organization ? 'Organization Today' : 'My Team Today'}</h3>
-            {user.role !== 'employee' && <Link className="btn secondary sm" to="/approvals">
+            {['manager', 'admin'].includes(user.role) && <Link className="btn secondary sm" to="/approvals">
               Review approvals <ArrowRight size={14} /></Link>}
           </div>
           <div className="card-body grid cols-4" style={{ padding: 14 }}>
@@ -255,9 +283,15 @@ export default function Dashboard() {
 
       <div className="grid cols-3">
         <div className="card">
-          <div className="card-head"><h3>Upcoming Holidays</h3></div>
+          <div className="card-head"><h3>Upcoming Holidays &amp; WFH Days</h3></div>
           <div className="card-body">
-            {data.upcoming_holidays.length === 0 && <EmptyState icon={CalendarDays} title="No holidays in the next 30 days" />}
+            {data.upcoming_holidays.length === 0 && !data.upcoming_company_wfh?.length && <EmptyState icon={CalendarDays} title="No holidays in the next 30 days" />}
+            {(data.upcoming_company_wfh || []).map((d) => (
+              <div key={`wfh-${d.id}`} style={{ display: 'flex', justifyContent: 'space-between', padding: '7px 0', borderBottom: '1px solid var(--border)' }}>
+                <span>{d.note} <span className="badge wfh">Company WFH</span></span>
+                <strong>{fmtDate(d.date)}</strong>
+              </div>
+            ))}
             {data.upcoming_holidays.map((h) => (
               <div key={h.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '7px 0', borderBottom: '1px solid var(--border)' }}>
                 <span>{h.name} <span className="badge neutral">{titleCase(h.holiday_type)}</span></span>

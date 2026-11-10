@@ -1,11 +1,15 @@
 // Attendance regularization: fix missed check-ins/outs, pending manager approval.
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '../api'
+import { useAuth } from '../AuthContext'
 import MentionTextarea from '../components/MentionTextarea'
 import {
-  EmptyState, Field, Modal, Spinner, StatusBadge, fmtDate, fmtTime, localDateStr, useToast,
+  ConfirmDialog, EmptyState, Field, Modal, Spinner, StatusBadge, fmtDate, fmtTime, localDateStr, useToast,
 } from '../components/ui'
 import { PenLine } from '../components/icons'
+import { searchPeople as searchPeopleApi } from '../components/RequestForms'
+import { ConversationModal } from '../components/Conversation'
+import OnboardingNotice from '../components/OnboardingNotice'
 
 function ApplyModal({ onClose, onDone }) {
   const toast = useToast()
@@ -13,11 +17,7 @@ function ApplyModal({ onClose, onDone }) {
   const [mentionedIds, setMentionedIds] = useState([])
   const [busy, setBusy] = useState(false)
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }))
-  const searchPeople = useCallback((term) => {
-    const params = new URLSearchParams()
-    if (term) params.set('search', term)
-    return api.get(`/regularization/mention-options?${params}`)
-  }, [])
+  const searchPeople = useCallback(searchPeopleApi, [])
   const today = localDateStr(new Date())
 
   const submit = async (e) => {
@@ -66,7 +66,7 @@ function ApplyModal({ onClose, onDone }) {
                    onChange={(e) => set('check_out', e.target.value)} />
           </Field>
         </div>
-        <Field label="Reason" required help="Type @ followed by a colleague’s name to mention them.">
+        <Field label="Reason" required help="Type @ to tag a colleague — they join the conversation and get an email.">
           <MentionTextarea className="input" required minLength={3} rows={4} value={form.reason}
             searchUsers={searchPeople} mentionedIds={mentionedIds} onMentionsChange={setMentionedIds}
             onChange={(value) => set('reason', value)}
@@ -79,20 +79,40 @@ function ApplyModal({ onClose, onDone }) {
 
 export default function Regularization() {
   const toast = useToast()
+  const { user } = useAuth()
   const [rows, setRows] = useState(null)
   const [showApply, setShowApply] = useState(false)
+  const [openItem, setOpenItem] = useState(null)
+  const [cancelItem, setCancelItem] = useState(null)
+  const [busy, setBusy] = useState(false)
 
   const load = useCallback(() => {
     api.get('/regularization').then(setRows).catch((e) => toast(e.message, 'error'))
   }, [toast])
   useEffect(load, [load])
 
+  const cancel = async () => {
+    setBusy(true)
+    try {
+      await api.post(`/regularization/${cancelItem.id}/cancel`)
+      toast('Request cancelled', 'success')
+      setCancelItem(null)
+      load()
+    } catch (err) {
+      toast(err.message, 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <OnboardingNotice />
       <div className="page-head" style={{ marginBottom: 0 }}>
         <div><h2>Attendance Regularization</h2>
           <div className="sub">Forgot to check in or out? Request a correction here.</div></div>
-        <button className="btn" onClick={() => setShowApply(true)}>+ New Request</button>
+        <button className="btn" onClick={() => setShowApply(true)} disabled={!user.can_request}
+                title={user.can_request ? undefined : "You haven't been assigned a manager yet"}>+ New Request</button>
       </div>
 
       <div className="card">
@@ -102,7 +122,7 @@ export default function Regularization() {
           : (
             <div className="table-wrap"><table className="table">
               <thead><tr><th>Date</th><th>Requested In</th><th>Requested Out</th>
-                <th>Reason</th><th>Status</th><th>Reviewed By</th></tr></thead>
+                <th>Reason</th><th>Status</th><th>Reviewed By</th><th></th></tr></thead>
               <tbody>
                 {rows.map((r) => (
                   <tr key={r.id}>
@@ -113,6 +133,10 @@ export default function Regularization() {
                     <td><StatusBadge status={r.status} />
                       {r.approver_comment && <div className="help-text">“{r.approver_comment}”</div>}</td>
                     <td>{r.approver_name || '—'}</td>
+                    <td style={{ whiteSpace: 'nowrap' }}>
+                      <button className="btn ghost sm" onClick={() => setOpenItem(r)}>Conversation</button>{' '}
+                      {r.status === 'pending' && <button className="btn ghost sm" onClick={() => setCancelItem(r)}>Cancel</button>}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -122,6 +146,11 @@ export default function Regularization() {
 
       {showApply && <ApplyModal onClose={() => setShowApply(false)}
                                 onDone={() => { setShowApply(false); load() }} />}
+      {openItem && <ConversationModal kind="regularization" id={openItem.id}
+                                      onClose={() => setOpenItem(null)} onChanged={load} />}
+      {cancelItem && <ConfirmDialog title="Cancel request" danger busy={busy}
+        message="Are you sure you want to cancel this pending regularization request?"
+        confirmLabel="Yes, cancel it" onConfirm={cancel} onClose={() => setCancelItem(null)} />}
     </div>
   )
 }
