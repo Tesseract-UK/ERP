@@ -209,7 +209,7 @@ export default function Policies() {
   return (
     <div className="grid cols-2" style={{ alignItems: 'start' }}>
       <div className="card">
-        <div className="card-head"><h3>Annual Allocations</h3>
+        <div className="card-head"><h3>Standard Annual Allocations</h3>
           <button className="btn sm" onClick={savePolicies} disabled={busy || !policies}>
             {busy ? 'Saving…' : 'Save Policy'}</button></div>
         <div className="card-body">
@@ -221,7 +221,9 @@ export default function Policies() {
             </div>
           ))}
           <p className="help-text" style={{ marginTop: 10 }}>
-            Balances are computed against these allocations for the current calendar year.
+            These are the standard numbers HR can copy onto an employee (Employee → Leave &amp; WFH
+            Allocations → “Fill from company policy”). They are not applied automatically: every
+            employee’s balance is 0 until HR sets it.
             Unpaid leave is always unlimited. WFH accrues monthly (this annual number ÷ 12
             per month) rather than being granted all at once, and can go negative if overused.
             New joiners have no balance until HR assigns their reporting manager.

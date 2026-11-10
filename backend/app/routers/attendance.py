@@ -16,6 +16,7 @@ from ..models import (
 )
 from ..schemas import CheckInRequest, CheckOutRequest
 from ..serializers import attendance_out
+from ..shifts import OVERNIGHT_CHECKOUT_WINDOW, check_in_work_date, is_overnight
 from ..utils import audit, recompute_attendance
 
 router = APIRouter(prefix="/attendance", tags=["attendance"])
@@ -24,6 +25,24 @@ router = APIRouter(prefix="/attendance", tags=["attendance"])
 def _today_record(db: Session, user_id: int, for_date: date) -> Attendance | None:
     return db.query(Attendance).filter(
         Attendance.user_id == user_id, Attendance.date == for_date).first()
+
+
+def _active_record(db: Session, user: User, now) -> Attendance | None:
+    """The record a punch at `now` belongs to.
+
+    Normally today's. For an overnight shift (e.g. 17:30-02:30), a record
+    from yesterday that is still open — or was closed under a minute ago, so
+    it can be undone — is the one being worked, even after midnight."""
+    att = _today_record(db, user.id, now.date())
+    if att is not None and att.check_in is not None:
+        return att
+    if is_overnight(user.shift):
+        prev = _today_record(db, user.id, now.date() - timedelta(days=1))
+        if (prev is not None and prev.check_in is not None
+                and now - prev.check_in < OVERNIGHT_CHECKOUT_WINDOW
+                and (prev.check_out is None or (now - prev.check_out).total_seconds() <= 60)):
+            return prev
+    return att
 
 
 def _has_approved_wfh(db: Session, user_id: int, for_date: date) -> bool:
@@ -59,7 +78,7 @@ def _require_checkout_location(body: CheckOutRequest) -> tuple[float, float, flo
 
 @router.get("/today")
 def today(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    att = _today_record(db, user.id, attendance_now().date())
+    att = _active_record(db, user, attendance_now())
     return attendance_out(att) if att else None
 
 
@@ -67,11 +86,12 @@ def today(user: User = Depends(get_current_user), db: Session = Depends(get_db))
 def check_in(body: CheckInRequest, request: Request,
              user: User = Depends(attendance_user), db: Session = Depends(get_db)):
     now = attendance_now()
-    att = _today_record(db, user.id, now.date())
+    work_date = check_in_work_date(user.shift, now)
+    att = _today_record(db, user.id, work_date)
     if att and att.check_in:
         raise HTTPException(status_code=400, detail="You have already checked in today")
 
-    approved_wfh = _has_approved_wfh(db, user.id, now.date())
+    approved_wfh = _has_approved_wfh(db, user.id, work_date)
     distance = validate_attendance_location(
         db,
         body.latitude,
@@ -81,7 +101,7 @@ def check_in(body: CheckInRequest, request: Request,
     )
     info = client_info(request)
     if att is None:
-        att = Attendance(user_id=user.id, date=now.date())
+        att = Attendance(user_id=user.id, date=work_date)
         db.add(att)
     att.check_in = now
     att.status = "wfh" if approved_wfh else "present"
@@ -101,14 +121,14 @@ def check_in(body: CheckInRequest, request: Request,
 def check_out(body: CheckOutRequest, request: Request,
               user: User = Depends(attendance_user), db: Session = Depends(get_db)):
     now = attendance_now()
-    att = _today_record(db, user.id, now.date())
+    att = _active_record(db, user, now)
     if att is None or att.check_in is None:
         raise HTTPException(status_code=400, detail="You have not checked in today")
     if att.check_out:
         raise HTTPException(status_code=400, detail="You have already checked out today")
 
     latitude, longitude, accuracy = _require_checkout_location(body)
-    approved_wfh = _has_approved_wfh(db, user.id, now.date())
+    approved_wfh = _has_approved_wfh(db, user.id, att.date)
     distance = validate_attendance_location(
         db,
         latitude,
@@ -138,14 +158,14 @@ def recheck_in(body: CheckInRequest, request: Request,
                user: User = Depends(attendance_user), db: Session = Depends(get_db)):
     """Undo a mistaken checkout for up to 60 seconds, keeping evidence in audit."""
     now = attendance_now()
-    att = _today_record(db, user.id, now.date())
+    att = _active_record(db, user, now)
     if att is None or att.check_in is None or att.check_out is None:
         raise HTTPException(status_code=400, detail="There is no recent checkout to undo")
     elapsed = (now - att.check_out).total_seconds()
     if elapsed < 0 or elapsed > 60:
         raise HTTPException(status_code=400, detail="The one-minute recheck-in window has expired")
 
-    approved_wfh = _has_approved_wfh(db, user.id, now.date())
+    approved_wfh = _has_approved_wfh(db, user.id, att.date)
     distance = validate_attendance_location(
         db, body.latitude, body.longitude, body.accuracy_meters,
         allow_outside_office=approved_wfh,
@@ -178,7 +198,7 @@ def recheck_in(body: CheckInRequest, request: Request,
 def break_start(body: CheckOutRequest, request: Request,
                 user: User = Depends(attendance_user), db: Session = Depends(get_db)):
     now = attendance_now()
-    att = _today_record(db, user.id, now.date())
+    att = _active_record(db, user, now)
     if att is None or att.check_in is None:
         raise HTTPException(status_code=400, detail="Check in before starting a break")
     if att.check_out:
@@ -196,7 +216,7 @@ def break_start(body: CheckOutRequest, request: Request,
 def break_end(body: CheckOutRequest, request: Request,
               user: User = Depends(attendance_user), db: Session = Depends(get_db)):
     now = attendance_now()
-    att = _today_record(db, user.id, now.date())
+    att = _active_record(db, user, now)
     open_break = next((b for b in (att.breaks if att else []) if b.end_time is None), None)
     if open_break is None:
         raise HTTPException(status_code=400, detail="No break in progress")

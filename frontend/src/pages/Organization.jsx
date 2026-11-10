@@ -1,7 +1,7 @@
 // Admin: departments, designations, locations, shifts and company settings.
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '../api'
-import { ConfirmDialog, Field, Spinner, useToast } from '../components/ui'
+import { ConfirmDialog, Field, Spinner, fmtShift, useToast } from '../components/ui'
 
 function ItemList({ title, items, nameKey, extra, onAdd, onToggle, addFields }) {
   const [form, setForm] = useState({})
@@ -127,7 +127,7 @@ export default function Organization() {
                             { key: 'address', placeholder: 'Address', required: false }]}
                 onAdd={add('/admin/locations')} onToggle={toggle('locations')} />
       <ItemList title="Shifts" items={data.shifts} nameKey="name"
-                extra={(i) => `${i.start_time} – ${i.end_time}`}
+                extra={(i) => fmtShift(i.start_time, i.end_time)}
                 addFields={[{ key: 'name', placeholder: 'Shift name' },
                             { key: 'start_time', placeholder: 'Start', type: 'time' },
                             { key: 'end_time', placeholder: 'End', type: 'time' }]}

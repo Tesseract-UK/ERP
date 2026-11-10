@@ -11,7 +11,7 @@ from ..database import get_db
 from ..deps import client_info, get_current_user
 from ..attendance_location import attendance_now
 from ..models import (
-    LEAVE_TYPES, EmployeeLeavePolicy, LeavePolicy, LeaveRequest, User, WFHRequest,
+    LEAVE_TYPES, EmployeeLeavePolicy, LeaveRequest, User, WFHRequest,
 )
 from ..schemas import LeaveCreateRequest
 from ..serializers import leave_out
@@ -32,8 +32,9 @@ def _zero_balances() -> dict:
 
 def compute_balances(db: Session, user_id: int) -> dict:
     """Leave balance = annual allocation - approved usage this year, floored
-    at 0. Allocation is the employee's personal override if one is set,
-    otherwise the company-wide policy for that leave type.
+    at 0. Allocation is what HR has entered for this employee; until HR
+    fills it in, it is 0. The company-wide policy is only a template HR can
+    copy from — it is never applied automatically.
 
     WFH is accrued monthly rather than granted upfront: the annual figure
     (default 24) is really "2/month" — so only monthly_rate × months elapsed
@@ -47,7 +48,6 @@ def compute_balances(db: Session, user_id: int) -> dict:
         return _zero_balances()
     today = attendance_now().date()
     year_start, year_end = date(today.year, 1, 1), date(today.year, 12, 31)
-    policies = {p.leave_type: p.annual_allocation for p in db.query(LeavePolicy).all()}
     overrides = {o.leave_type: o.annual_allocation for o in db.query(EmployeeLeavePolicy)
                  .filter(EmployeeLeavePolicy.user_id == user_id).all()}
 
@@ -62,11 +62,11 @@ def compute_balances(db: Session, user_id: int) -> dict:
 
     balances = {}
     for lt in LEAVE_TYPES:
-        alloc = overrides.get(lt, policies.get(lt, 0))
+        alloc = overrides.get(lt, 0)
         balances[lt] = {"allocated": alloc, "used": float(used.get(lt) or 0),
                         "remaining": max(alloc - float(used.get(lt) or 0), 0)}
 
-    wfh_annual_cap = overrides.get("wfh", policies.get("wfh", 0))
+    wfh_annual_cap = overrides.get("wfh", 0)
     wfh_monthly_rate = round(wfh_annual_cap / 12, 2)
     wfh_accrued = round(wfh_monthly_rate * today.month, 2)  # this month's credit already counted
     balances["wfh"] = {

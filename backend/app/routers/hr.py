@@ -518,10 +518,15 @@ def get_employee_balance(employee_id: int, user: User = Depends(require_hr),
 def set_leave_overrides(employee_id: int, body: EmployeeLeaveOverrideRequest, request: Request,
                         user: User = Depends(require_hr), db: Session = Depends(get_db)):
     """Set (or clear, with a null value) this employee's personal leave/WFH
-    allocation — otherwise they use the company-wide policy."""
+    allocation. Unset types count as 0 (the company policy is only a template)."""
     emp = db.get(User, employee_id)
     if emp is None:
         raise HTTPException(status_code=404, detail="Employee not found")
+    if emp.id == user.id:
+        # Nobody sets their own leave: an HR's allocation is handled by an
+        # Admin or another HR.
+        raise HTTPException(status_code=403,
+                            detail="Your own leave allocation must be set by an Admin or another HR")
     valid_types = set(LEAVE_TYPES) | {"wfh"}
     for leave_type, value in body.allocations.items():
         if leave_type not in valid_types:

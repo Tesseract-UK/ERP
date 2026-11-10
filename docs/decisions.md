@@ -53,3 +53,16 @@ Tagged people can read the full thread (including the reason). Admins see all.
 **Date:** 2026-11-10
 **Decision:** `company_wfh_days` table; doesn't use WFH balance; holidays and WFH days auto-announce.
 **Status:** active
+
+## D-008: Leave balances are 0 until HR sets them per employee
+**Date:** 2026-11-10
+**Decision:** `compute_balances` uses only `employee_leave_policies`; the company policy is a template HR copies via "Fill from company policy". Nobody (incl. HR) may set their own allocation — an Admin or another HR does.
+**Why:** User request; avoids new joiners silently getting full-year balances.
+**Consequence:** existing employees in production show 0 after deploy until HR fills them.
+**Status:** active
+
+## D-009: Attendance follows the employee's shift
+**Date:** 2026-11-10
+**Decision:** Late = after own shift start + `LATE_GRACE_MINUTES` (30); no shift → old `LATE_ARRIVAL_TIME`. Shifts with end <= start are overnight: the record belongs to the start date; punches until 20h after check-in close it. Standard shifts are created at startup, matched on times.
+**Why:** New 13:30/16:30/17:30 shifts would otherwise be "late" daily and fail checkout after midnight.
+**Status:** active

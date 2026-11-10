@@ -22,7 +22,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 from app import mailer  # noqa: E402
 from app.database import Base, SessionLocal, engine  # noqa: E402
 from app.main import app  # noqa: E402
-from app.models import LeavePolicy, User  # noqa: E402
+from app.models import EmployeeLeavePolicy, LeavePolicy, User  # noqa: E402
 from app.security import hash_password  # noqa: E402
 from app.session_service import create_user_session  # noqa: E402
 
@@ -61,7 +61,17 @@ class Org:
         self.bob = self._user("bob", "employee", manager=self.manager)
         self.carol = self._user("carol", "employee", manager=self.other_manager)
         self.pending = self._user("pending", "employee", manager=None)
+        # Balances start at 0 until HR enters them; give the working
+        # employees what HR normally would.
+        for person in (self.hr, self.manager, self.other_manager, self.alice, self.bob, self.carol):
+            self.allocate(person, casual=12, sick=10, wfh=24)
         db.commit()
+
+    def allocate(self, user, **allocations):
+        for leave_type, value in allocations.items():
+            self.db.add(EmployeeLeavePolicy(user_id=user.id, leave_type=leave_type,
+                                            annual_allocation=value))
+        self.db.flush()
 
     def _user(self, name, role, manager=None):
         user = User(employee_code=f"T-{name}", email=f"{name}@tesseractuk.in",

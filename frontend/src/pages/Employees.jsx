@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../api'
 import {
-  ConfirmDialog, EmptyState, Field, Modal, Pagination, PasswordInput, Spinner, titleCase, useToast,
+  ConfirmDialog, EmptyState, Field, Modal, Pagination, PasswordInput, Spinner, fmtShift, titleCase, useToast,
 } from '../components/ui'
 import { useAuth } from '../AuthContext'
 import { IdCard } from '../components/icons'
@@ -16,7 +16,7 @@ const EMPTY_FORM = {
   emergency_contact_name: '', emergency_contact_phone: '', address: '',
 }
 
-function EmployeeModal({ employeeId, orgData, onClose, onDone }) {
+function EmployeeModal({ employeeId, orgData, onClose, onDone, onChangeRole }) {
   const { user } = useAuth()
   const toast = useToast()
   const [form, setForm] = useState(EMPTY_FORM)
@@ -94,7 +94,13 @@ function EmployeeModal({ employeeId, orgData, onClose, onDone }) {
             <select className="input" value={form.role} disabled={!!employeeId} onChange={(e) => set('role', e.target.value)}>
               {roles.map((r) => <option key={r} value={r}>{titleCase(r)}</option>)}
             </select>
-            {employeeId && <div className="help-text">Use the employee list’s Change Role action. Admin assigns HR; HR may promote Employees to Manager.</div>}
+            {employeeId && onChangeRole && (
+              <button type="button" className="btn ghost sm" style={{ marginTop: 6, paddingLeft: 0 }}
+                      onClick={() => onChangeRole({ id: employeeId, full_name: form.full_name, role: form.role })}>
+                Change role…
+              </button>
+            )}
+            {employeeId && <div className="help-text">Role changes are separate from Save and sign the person out. Only an Admin can make someone HR or Admin.</div>}
           </Field>
           {form.role === 'admin' ? (
             <Field label="Reporting manager" help="Admins don't report to anyone.">
@@ -134,7 +140,7 @@ function EmployeeModal({ employeeId, orgData, onClose, onDone }) {
           <Field label="Shift">
             <select className="input" value={form.shift_id} onChange={(e) => set('shift_id', e.target.value)}>
               <option value="">— Select —</option>
-              {orgData.shifts.map((s) => <option key={s.id} value={s.id}>{s.name} ({s.start_time}–{s.end_time})</option>)}
+              {orgData.shifts.map((s) => <option key={s.id} value={s.id}>{s.name} ({fmtShift(s.start_time, s.end_time)})</option>)}
             </select>
           </Field>
         </div>
@@ -391,7 +397,12 @@ export default function Employees() {
                        onDone={() => { setModal(null); load() }} />}
       {modal?.type === 'edit' && orgData &&
         <EmployeeModal employeeId={modal.id} orgData={orgData} onClose={() => setModal(null)}
-                       onDone={() => { setModal(null); load() }} />}
+                       onDone={() => { setModal(null); load() }}
+                       onChangeRole={(emp) => {
+                         const allowed = user.role === 'admin' ? emp.id !== user.id : emp.role === 'employee'
+                         if (allowed) setModal({ type: 'role', emp })
+                         else toast('Only an Admin can change this person’s role', 'error')
+                       }} />}
       {modal?.type === 'role' &&
         <ChangeRoleModal employee={modal.emp} user={user} onClose={() => setModal(null)}
                          onDone={() => { setModal(null); load() }} />}

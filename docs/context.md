@@ -26,3 +26,10 @@ before any push). Browser automation unavailable, so UI was build-checked but no
 **Outcome / decision:** See decisions D-001…D-007. Not pushed yet.
 
 ---
+
+## 2026-11-10 (afternoon) — feedback from first local click-test
+- Help-request recipient box looked pre-filled and listed the Admin twice (manager + admin). Replaced with server-side type-to-search picker (scales to any headcount), each person listed once.
+- Added shifts 10:00–19:00, 13:30–22:30, 16:30–01:30, 17:30–02:30. Found shifts were labels only: lateness used a global 09:30 and overnight checkout would fail after midnight. Made attendance shift-aware (D-009).
+- Leave balances now 0 until HR enters them; HR cannot edit their own (D-008). Fixed NumberInput not reflecting programmatic changes.
+- User thought "HR Mitaly" was HR, but role was still employee (role field locked in Edit form). Promoted via admin API; added "Change role…" button inside the Edit form.
+- Tests: 24 passing (9 new).

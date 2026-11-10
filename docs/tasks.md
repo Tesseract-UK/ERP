@@ -16,3 +16,4 @@
 - Manager-gated onboarding, manager-only approvals + admin override, conversations with
   @-tagging, email layer, company WFH days, combined Leave & WFH screen, reject confirmation,
   uploads removed, Clerk removed, pytest suite.
+- [ ] After deploy: HR must enter leave/WFH allocations for every existing employee (balances are 0 until set).

@@ -3,29 +3,13 @@ import { api } from '../api'
 import { EmptyState, Field, Pagination, Spinner, fmtDateTime, titleCase, useToast } from '../components/ui'
 import { MessageSquare } from '../components/icons'
 import { useAuth } from '../AuthContext'
+import PeoplePicker from '../components/PeoplePicker'
 
 const ACTIVE = new Set(['open', 'in_progress'])
 
-// Tick-box picker: nobody is included until they're ticked. (A native
-// <select multiple> read as "these people are already part of it".)
-function RecipientPicker({ contacts, value, onChange, max = 3 }) {
-  const toggle = (id) => onChange(value.includes(id) ? value.filter((x) => x !== id) : [...value, id])
-  if (!contacts.length) return <p className="help-text">No one available to contact.</p>
-  return (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-      {contacts.map((c) => {
-        const on = value.includes(c.id)
-        return (
-          <label key={c.id} className={`btn sm ${on ? '' : 'secondary'}`} style={{ cursor: 'pointer', gap: 6 }}>
-            <input type="checkbox" checked={on} disabled={!on && value.length >= max}
-                   onChange={() => toggle(c.id)} />
-            {c.name} <span style={{ opacity: 0.75 }}>· {titleCase(c.role)}</span>
-          </label>
-        )
-      })}
-    </div>
-  )
-}
+// Only your manager, HR and Admins can be addressed; the server searches and
+// enforces that, so this scales to any company size.
+const searchRecipients = (term) => api.get(`/requests/recipients?${new URLSearchParams(term ? { search: term } : {})}`)
 
 export default function Requests() {
   const toast = useToast()
@@ -35,11 +19,10 @@ export default function Requests() {
   const [pageData, setPageData] = useState(null)
   const [page, setPage] = useState(1)
   const [statusFilter, setStatusFilter] = useState('')
-  const [contacts, setContacts] = useState([])
   const [selected, setSelected] = useState(null)
   const [createOpen, setCreateOpen] = useState(false)
   const [busy, setBusy] = useState(false)
-  const [form, setForm] = useState({ title: '', category: 'IT support', otherCategory: '', priority: 'normal', description: '', recipient_ids: [] })
+  const [form, setForm] = useState({ title: '', category: 'IT support', otherCategory: '', priority: 'normal', description: '', recipients: [] })
   const [comment, setComment] = useState('')
   const [mentions, setMentions] = useState([])
 
@@ -57,10 +40,7 @@ export default function Requests() {
       }
     } catch (e) { toast(e.message, 'error') }
   }, [isAdmin, page, statusFilter, toast])
-  useEffect(() => {
-    load()
-    api.get('/requests/recipients').then(setContacts).catch((e) => toast(e.message, 'error'))
-  }, [load, toast])
+  useEffect(() => { load() }, [load])
 
   const openRequest = async (id) => {
     try { setSelected(await api.get(`/requests/${id}`)); setComment(''); setMentions([]) }
@@ -72,14 +52,15 @@ export default function Requests() {
     if (!category) { toast('Enter the request category', 'error'); return }
     const data = new FormData()
     Object.entries({ ...form, category }).forEach(([key, value]) => {
-      if (key === 'otherCategory') return
-      else data.append(key, key === 'recipient_ids' ? JSON.stringify(value) : value)
+      if (key === 'otherCategory' || key === 'recipients') return
+      data.append(key, value)
     })
+    data.append('recipient_ids', JSON.stringify(form.recipients.map((p) => p.id)))
     setBusy(true)
     try {
       const item = await api.postForm('/requests', data)
       toast('Request sent', 'success'); setCreateOpen(false)
-      setForm({ title: '', category: 'IT support', otherCategory: '', priority: 'normal', description: '', recipient_ids: [] })
+      setForm({ title: '', category: 'IT support', otherCategory: '', priority: 'normal', description: '', recipients: [] })
       await load(); setSelected(item)
     } catch (e) { toast(e.message, 'error') } finally { setBusy(false) }
   }
@@ -118,9 +99,9 @@ export default function Requests() {
         <div style={{ borderTop: '1px solid var(--border)', paddingTop: 10, marginTop: 10 }}><strong>Conversation</strong>
           {(selected.messages || []).map((m) => <div key={m.id} style={{ padding: '10px 0', borderBottom: '1px solid var(--border)' }}><strong>{m.user_name}</strong> <span className="help-text">· {fmtDateTime(m.created_at)} · {titleCase(m.type)}</span><div style={{ whiteSpace: 'pre-wrap' }}>{m.body}</div></div>)}
         </div>
-        {selected.can_reply && <form onSubmit={(e) => { e.preventDefault(); act(`/requests/${selected.id}/comments`, { body: comment, recipient_ids: mentions }); setComment('') }} style={{ marginTop: 14 }}>
+        {selected.can_reply && <form onSubmit={(e) => { e.preventDefault(); act(`/requests/${selected.id}/comments`, { body: comment, recipient_ids: mentions.map((p) => p.id) }); setComment('') }} style={{ marginTop: 14 }}>
           <Field label="Reply" required><textarea className="input" required value={comment} onChange={(e) => setComment(e.target.value)} /></Field>
-          <Field label="Send reply to" required help="Tick at least one person."><RecipientPicker contacts={contacts} value={mentions} onChange={setMentions} /></Field>
+          <Field label="Send reply to" required help="Add at least one person."><PeoplePicker search={searchRecipients} value={mentions} onChange={setMentions} placeholder="Type a name to add someone…" /></Field>
           <button className="btn sm" disabled={busy || mentions.length === 0}>Send Reply</button>
         </form>}
         <div className="toolbar" style={{ marginTop: 14 }}>
@@ -135,7 +116,7 @@ export default function Requests() {
       <div className="grid cols-2"><Field label="Category" required><select className="input" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value, otherCategory: '' })}>{['IT support', 'HR', 'Payroll', 'Facilities', 'Other'].map((x) => <option key={x}>{x}</option>)}</select></Field><Field label="Priority"><select className="input" value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })}>{['low', 'normal', 'high'].map((x) => <option key={x} value={x}>{titleCase(x)}</option>)}</select></Field></div>
       {form.category === 'Other' && <Field label="Specify category" required><input className="input" required maxLength={80} value={form.otherCategory} onChange={(e) => setForm({ ...form, otherCategory: e.target.value })} placeholder="Enter another category" /></Field>}
       <Field label="Description" required><textarea className="input" required minLength={3} maxLength={10000} rows={5} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></Field>
-      <Field label="Send to" required help="Tick one to three people (your manager, HR, an admin). Only the people you tick will see this request."><RecipientPicker contacts={contacts} value={form.recipient_ids} onChange={(ids) => setForm({ ...form, recipient_ids: ids })} /></Field>
-    </div><div className="modal-foot"><button type="button" className="btn secondary" onClick={() => setCreateOpen(false)}>Cancel</button><button className="btn" disabled={busy || form.recipient_ids.length < 1 || form.recipient_ids.length > 3}>{busy ? 'Sending…' : 'Send Request'}</button></div></form></div></div>}
+      <Field label="Send to" required help="Add one to three people: your manager, someone from HR, or an admin. Only they will see this request."><PeoplePicker search={searchRecipients} value={form.recipients} onChange={(people) => setForm({ ...form, recipients: people })} placeholder="Type a name to add someone…" /></Field>
+    </div><div className="modal-foot"><button type="button" className="btn secondary" onClick={() => setCreateOpen(false)}>Cancel</button><button className="btn" disabled={busy || form.recipients.length < 1 || form.recipients.length > 3}>{busy ? 'Sending…' : 'Send Request'}</button></div></form></div></div>}
   </div>
 }

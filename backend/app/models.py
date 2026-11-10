@@ -106,6 +106,7 @@ class User(Base):
     department = relationship("Department", lazy="joined")
     designation = relationship("Designation", lazy="joined")
     manager = relationship("User", remote_side=[id], lazy="joined", join_depth=1)
+    shift = relationship("Shift", lazy="joined")
 
 
 class AuthSession(Base):

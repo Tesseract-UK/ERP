@@ -240,6 +240,25 @@ def _backfill_conversation_participants():
 
 _backfill_conversation_participants()
 
+
+def _ensure_standard_shifts():
+    """Create any missing standard shift (matched on its times, not name)."""
+    from sqlalchemy.orm import Session as _Session
+    from .models import Shift
+    from .shifts import STANDARD_SHIFTS
+    with _Session(engine) as db:
+        have = {(s.start_time, s.end_time) for s in db.query(Shift).all()}
+        names = {s.name.lower() for s in db.query(Shift).all()}
+        for name, start, end in STANDARD_SHIFTS:
+            if (start, end) not in have:
+                label = name if name.lower() not in names else f"{name} {start}-{end}"
+                db.add(Shift(name=label, start_time=start, end_time=end))
+                names.add(label.lower())
+        db.commit()
+
+
+_ensure_standard_shifts()
+
 for router in (
     auth.router,
     dashboard.router,

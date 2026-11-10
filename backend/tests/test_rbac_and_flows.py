@@ -36,6 +36,10 @@ def test_hr_assigning_manager_completes_onboarding(org, sent_emails):
     assert r.status_code == 200, r.text
     me = org.client(org.pending).get("/profile").json()
     assert me["can_request"] is True
+    # Balances stay 0 until HR enters them — the company policy is not applied.
+    assert org.client(org.pending).get("/leaves/balance").json()["casual"]["allocated"] == 0
+    r = hr.put(f"/hr/employees/{org.pending.id}/leave-overrides", json={"allocations": {"casual": 12}})
+    assert r.status_code == 200, r.text
     assert org.client(org.pending).get("/leaves/balance").json()["casual"]["allocated"] == 12
     assert any(to == "pending@tesseractuk.in" for to, _s, _b in sent_emails)
 

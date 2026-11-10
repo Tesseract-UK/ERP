@@ -6,7 +6,7 @@ from fastapi import HTTPException
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from .config import HALF_DAY_THRESHOLD_HOURS, LATE_ARRIVAL_TIME, STANDARD_WORK_HOURS
+from .config import HALF_DAY_THRESHOLD_HOURS, STANDARD_WORK_HOURS
 from .mailer import queue_email
 from .models import Announcement, Attendance, AuditLog, Holiday, Notification, User
 
@@ -164,8 +164,14 @@ def recompute_attendance(att: Attendance) -> None:
         if att.status in ("present", "half_day"):
             att.status = "half_day" if att.work_hours < HALF_DAY_THRESHOLD_HOURS else "present"
     if att.check_in:
-        late_h, late_m = (int(x) for x in LATE_ARRIVAL_TIME.split(":"))
-        att.is_late = (att.check_in.hour, att.check_in.minute) > (late_h, late_m)
+        from sqlalchemy.orm import object_session
+
+        from .shifts import is_late_arrival
+        # att.user is not populated on a just-added record, so resolve it.
+        owner = att.user
+        if owner is None and att.user_id is not None and object_session(att) is not None:
+            owner = object_session(att).get(User, att.user_id)
+        att.is_late = is_late_arrival(owner.shift if owner else None, att.date, att.check_in)
     if att.status_override in {"present", "absent"}:
         # The Admin correction is the reviewed final status. Recompute punch
         # durations, but do not replace that decision with an inferred status.

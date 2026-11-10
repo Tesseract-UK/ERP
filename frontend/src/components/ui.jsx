@@ -1,5 +1,5 @@
 // Small shared UI primitives.
-import { createContext, useCallback, useContext, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useState } from 'react'
 import { ChevronLeft, ChevronRight, Eye, EyeOff, Inbox } from './icons'
 
 export const Spinner = () => <div className="spinner" role="status" aria-label="Loading" />
@@ -82,6 +82,12 @@ export function PasswordInput({ inputClassName = 'input', ...props }) {
 // the caller decides what null means (default to 0, or "no value set").
 export function NumberInput({ value, onChange, min = 0, max, className = 'input', ...props }) {
   const [raw, setRaw] = useState(value === null || value === undefined ? '' : String(value))
+  // Follow changes made from outside (e.g. "fill defaults"), but not the
+  // echo of what the user is typing ("1." stays "1." while typing).
+  useEffect(() => {
+    const ext = value === null || value === undefined ? '' : String(value)
+    setRaw((cur) => ((cur === '' ? '' : String(Number(cur))) === ext ? cur : ext))
+  }, [value])
   return (
     <input {...props} className={className} type="number" min={min} max={max} value={raw}
            onChange={(e) => {
@@ -156,3 +162,12 @@ export const fmtDateTime = (iso) => iso ? `${fmtDate(iso)} ${fmtTime(iso)}` : '�
 export const fmtHours = (h) => h == null ? '—' : `${Math.floor(h)}h ${Math.round((h % 1) * 60)}m`
 export const titleCase = (s) => (s || '').replaceAll('_', ' ').replace(/\b\w/g, (c) => c.toUpperCase())
 export const initials = (name) => (name || '?').split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase()
+
+// "17:30"/"02:30" → "5:30 PM – 2:30 AM (next day)"
+export function fmtShift(start, end) {
+  const t = (hhmm) => {
+    const [h, m] = (hhmm || '00:00').split(':').map(Number)
+    return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`
+  }
+  return `${t(start)} – ${t(end)}${end <= start ? ' (next day)' : ''}`
+}

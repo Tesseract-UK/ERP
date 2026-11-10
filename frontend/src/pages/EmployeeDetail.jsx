@@ -65,7 +65,7 @@ function AttendanceCorrectionCard({ employee, onSaved }) {
   )
 }
 
-function AllocationsCard({ employeeId }) {
+function AllocationsCard({ employeeId, readOnly }) {
   const toast = useToast()
   const [overrides, setOverrides] = useState(null)
   const [balance, setBalance] = useState(null)
@@ -80,6 +80,10 @@ function AllocationsCard({ employeeId }) {
   const setOverride = (lt, value) => {
     setOverrides((o) => ({ ...o, [lt]: { ...o[lt], override: value } }))
   }
+
+  // Copy the company policy into any field HR hasn't filled yet.
+  const fillDefaults = () => setOverrides((o) => Object.fromEntries(Object.entries(o).map(
+    ([lt, v]) => [lt, { ...v, override: v.override ?? v.company_default }])))
 
   const save = async () => {
     setBusy(true)
@@ -101,8 +105,11 @@ function AllocationsCard({ employeeId }) {
   return (
     <div className="card">
       <div className="card-head"><h3>Leave &amp; WFH Allocations</h3>
-        <button className="btn secondary sm" onClick={save} disabled={busy}>
-          {busy ? 'Saving…' : 'Save'}</button>
+        {!readOnly && <div className="toolbar">
+          <button className="btn ghost sm" onClick={fillDefaults} disabled={busy}>Fill from company policy</button>
+          <button className="btn secondary sm" onClick={save} disabled={busy}>
+            {busy ? 'Saving…' : 'Save'}</button>
+        </div>}
       </div>
       <div className="card-body">
         {ALLOCATION_TYPES.map((lt) => {
@@ -111,10 +118,10 @@ function AllocationsCard({ employeeId }) {
             <div key={lt} style={{ padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span>{lt === 'wfh' ? 'Work From Home (annual cap)' : `${titleCase(lt)} Leave`}</span>
-                <NumberInput style={{ width: 110 }} min={0} max={365}
+                <NumberInput style={{ width: 110 }} min={0} max={365} disabled={readOnly}
                              value={overrides[lt].override}
                              onChange={(n) => setOverride(lt, n)}
-                             placeholder={`Default: ${overrides[lt].company_default}`} />
+                             placeholder={`0 · policy ${overrides[lt].company_default}`} />
               </div>
               {wfhBal && (
                 <div className="help-text" style={{ marginTop: 4 }}>
@@ -129,8 +136,9 @@ function AllocationsCard({ employeeId }) {
           )
         })}
         <p className="help-text" style={{ marginTop: 10 }}>
-          Leave a field blank to use the company default. A number overrides it for this
-          employee only. WFH accrues monthly and can go negative if overused.
+          {readOnly && <strong>This is your own allocation — an Admin or another HR sets it. </strong>}
+          Every balance starts at 0 until HR enters it here. Blank means 0. Use “Fill from
+          company policy” to copy the standard numbers, adjust, then Save. WFH accrues monthly and can go negative if overused.
         </p>
       </div>
     </div>
@@ -300,7 +308,7 @@ export default function EmployeeDetail() {
         )}
       </div>
 
-      <AllocationsCard employeeId={Number(id)} />
+      <AllocationsCard employeeId={Number(id)} readOnly={Number(id) === user.id} />
 
       {user.role === 'admin' && <AttendanceCorrectionCard employee={emp} onSaved={(record) => {
         setCalData((current) => current ? {

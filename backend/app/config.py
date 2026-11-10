@@ -152,7 +152,10 @@ STANDARD_WORK_HOURS = float(os.getenv("STANDARD_WORK_HOURS", "8"))
 HALF_DAY_THRESHOLD_HOURS = float(
     os.getenv("HALF_DAY_THRESHOLD_HOURS", "4")
 )
+# Used only for employees with no shift assigned.
 LATE_ARRIVAL_TIME = os.getenv("LATE_ARRIVAL_TIME", "09:30")
+# Minutes after the employee's own shift start before they count as late.
+LATE_GRACE_MINUTES = int(os.getenv("LATE_GRACE_MINUTES", "30"))
 OFFICE_LATITUDE = float(os.getenv("OFFICE_LATITUDE", "22.72267583211552"))
 OFFICE_LONGITUDE = float(os.getenv("OFFICE_LONGITUDE", "75.88714542620116"))
 OFFICE_GEOFENCE_RADIUS_METERS = float(os.getenv("OFFICE_GEOFENCE_RADIUS_METERS", "500"))

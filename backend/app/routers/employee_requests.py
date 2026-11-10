@@ -29,27 +29,36 @@ REQUEST_PRIORITIES = {"low", "normal", "high"}
 ACTIVE_STATUSES = {"open", "in_progress"}
 
 
-def _allowed_contacts(db: Session, requester: User) -> list[dict]:
-    # One entry per person. A manager who is also an Admin (allowed by the
-    # reporting-line rules) is listed once, as "manager".
-    contacts: list[dict] = []
-    seen: set[int] = set()
-    if requester.manager_id:
-        manager = db.get(User, requester.manager_id)
-        if manager is not None and manager.is_active:
-            contacts.append({"id": manager.id, "name": manager.full_name, "role": "manager"})
-            seen.add(manager.id)
+def _contact_role(requester: User, person: User) -> str | None:
+    """How `person` may be addressed by `requester`, or None if not allowed.
+    Their manager (whatever their role) counts as "manager"."""
+    if not person.is_active or person.id == requester.id:
+        return None
+    if requester.manager_id and person.id == requester.manager_id:
+        return "manager"
+    if person.role in ("hr", "admin"):
+        return person.role
+    return None
 
-    for role in ("hr", "admin"):
-        users = db.query(User).filter(
-            User.role == role,
-            User.is_active.is_(True),
-            User.id != requester.id,
-        ).order_by(User.full_name).all()
-        for user in users:
-            if user.id not in seen:
-                contacts.append({"id": user.id, "name": user.full_name, "role": role})
-                seen.add(user.id)
+
+def _allowed_contacts(db: Session, requester: User, search: str | None = None,
+                      limit: int = 20) -> list[dict]:
+    """Searchable list of people the requester may contact: their manager,
+    HR and Admins. Each person appears once; the manager is listed first."""
+    q = db.query(User).filter(
+        User.is_active.is_(True), User.id != requester.id,
+        or_(User.role.in_(("hr", "admin")),
+            User.id == (requester.manager_id or -1)),
+    )
+    term = (search or "").strip()
+    if term:
+        like = f"%{term}%"
+        q = q.filter(or_(User.full_name.ilike(like), User.email.ilike(like),
+                         User.employee_code.ilike(like)))
+    people = q.order_by(User.full_name).limit(limit).all()
+    contacts = [{"id": p.id, "name": p.full_name, "email": p.email,
+                 "role": _contact_role(requester, p)} for p in people]
+    contacts.sort(key=lambda c: c["role"] != "manager")
     return contacts
 
 
@@ -59,24 +68,21 @@ def _validate_contact_ids(
     if not recipient_ids or len(recipient_ids) > 3 or len(set(recipient_ids)) != len(recipient_ids):
         raise HTTPException(status_code=400, detail="Mention one to three different people")
 
-    allowed = {item["id"]: item["role"] for item in _allowed_contacts(db, requester)}
-    if any(recipient_id not in allowed for recipient_id in recipient_ids):
+    users = db.query(User).filter(User.id.in_(recipient_ids)).all()
+    by_id = {user.id: user for user in users}
+    if len(by_id) != len(recipient_ids) or any(not u.is_active for u in users):
+        raise HTTPException(status_code=400, detail="A selected contact is no longer active")
+    roles = [_contact_role(requester, by_id[rid]) for rid in recipient_ids]
+    if any(role is None for role in roles):
         raise HTTPException(
             status_code=400,
             detail="You can mention only your manager, HR, or an admin",
         )
-    roles = [allowed[recipient_id] for recipient_id in recipient_ids]
     if len(set(roles)) != len(roles):
         raise HTTPException(
             status_code=400,
             detail="Mention no more than one person for each role",
         )
-    users = db.query(User).filter(
-        User.id.in_(recipient_ids), User.is_active.is_(True)
-    ).all()
-    by_id = {user.id: user for user in users}
-    if len(by_id) != len(recipient_ids):
-        raise HTTPException(status_code=400, detail="A selected contact is no longer active")
     return [by_id[recipient_id] for recipient_id in recipient_ids]
 
 
@@ -188,10 +194,11 @@ def _parse_recipient_ids(raw: str) -> list[int]:
 
 @router.get("/recipients")
 def request_recipients(
-    user: User = Depends(get_current_user), db: Session = Depends(get_db)
+    search: str | None = Query(None, max_length=100),
+    user: User = Depends(get_current_user), db: Session = Depends(get_db),
 ):
-    """Return only the employee's manager and active HR/admin contacts."""
-    return _allowed_contacts(db, user)
+    """Search the people this user may contact (manager, HR, Admins)."""
+    return _allowed_contacts(db, user, search)
 
 
 @router.get("")
