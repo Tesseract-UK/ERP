@@ -4,6 +4,7 @@ export {
   CalendarDays, IdCard, ClipboardList, BarChart3, Megaphone, Building2,
   ShieldCheck, Bell, Menu, Inbox, ChevronLeft, ChevronRight, AlertTriangle,
   Cake, CheckCircle2, Download, X, LogOut, ArrowRight, Eye, EyeOff, MessageSquare,
+  MapPin, CalendarCheck, Lock,
 } from 'lucide-react'
 
 // The app's logo mark (from Assests/WithoutBg.svg). Inherits color via

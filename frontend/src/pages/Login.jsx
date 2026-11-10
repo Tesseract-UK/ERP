@@ -3,7 +3,8 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 
 import { API_BASE } from '../api'
 import { useAuth } from '../AuthContext'
-import { Logo } from '../components/icons'
+import AuthShell, { AuthAlert, GoogleButton } from '../components/AuthShell'
+import { Lock } from '../components/icons'
 
 const GOOGLE_ERRORS = {
   google_not_configured:
@@ -59,64 +60,18 @@ export default function Login() {
   }
 
   return (
-    <div className="login-wrap">
-      <div className="login-card">
-        <div className="login-header">
-          <Logo />
-          <h1>Welcome back</h1>
-          <p>Sign in to your Tesseract HRMS account</p>
-        </div>
-
-        {error && (
-          <div
-            role="alert"
-            className="login-error"
-            style={{
-              marginBottom: '16px',
-              padding: '12px',
-              borderRadius: '8px',
-              background: '#fff0f0',
-              color: '#b42318',
-              fontSize: '14px',
-            }}
-          >
-            {error}
-          </div>
-        )}
-
-        <button
-          type="button"
-          onClick={handleGoogleLogin}
-          disabled={googleLoading}
-          style={{
-            width: '100%',
-            padding: '12px 16px',
-            border: '1px solid #d1d5db',
-            borderRadius: '8px',
-            background: '#ffffff',
-            color: '#111827',
-            cursor: googleLoading ? 'wait' : 'pointer',
-            fontSize: '14px',
-            fontWeight: 500,
-          }}
-        >
-          {googleLoading ? 'Redirecting to Google…' : 'Continue with Google'}
-        </button>
-
-        <p
-          style={{
-            textAlign: 'center',
-            marginTop: '20px',
-            fontSize: '14px',
-          }}
-        >
-          New to Tesseract?{' '}
-          <Link to="/signup">Create an account</Link>
-        </p>
-        <p style={{ textAlign: 'center', marginTop: 12, fontSize: 13 }}>
-          Administrator? <Link to="/admin">Sign in here</Link>
-        </p>
-      </div>
-    </div>
+    <AuthShell
+      eyebrow="Welcome back"
+      title="Sign in to your workspace"
+      subtitle="Use your Tesseract Google account to continue."
+      footer={<>
+        <p>New to Tesseract? <Link to="/signup">Create an account</Link></p>
+        <p className="auth-admin"><Lock size={13} /> Administrator? <Link to="/admin">Sign in here</Link></p>
+      </>}
+    >
+      <AuthAlert>{error}</AuthAlert>
+      <GoogleButton onClick={handleGoogleLogin} busy={googleLoading}>Continue with Google</GoogleButton>
+      <div className="auth-divider"><span>Only verified @tesseractuk.in accounts</span></div>
+    </AuthShell>
   )
 }

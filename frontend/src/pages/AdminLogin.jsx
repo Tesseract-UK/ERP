@@ -3,7 +3,8 @@ import { Link, useNavigate } from 'react-router-dom'
 
 import { api } from '../api'
 import { useAuth } from '../AuthContext'
-import { Logo } from '../components/icons'
+import AuthShell, { AuthAlert } from '../components/AuthShell'
+import { PasswordInput } from '../components/ui'
 
 export default function AdminLogin() {
   const navigate = useNavigate()
@@ -37,52 +38,28 @@ export default function AdminLogin() {
   }
 
   return (
-    <div className="login-wrap">
-      <div className="login-card">
-        <div className="login-header">
-          <Logo />
-          <h1>Administrator sign in</h1>
-          <p>Use your Tesseract administrator account</p>
+    <AuthShell
+      eyebrow="Restricted"
+      title="Administrator sign in"
+      subtitle="Use your Tesseract administrator credentials."
+      footer={<p>Not an administrator? <Link to="/login">Continue with Google</Link></p>}
+    >
+      <AuthAlert>{error}</AuthAlert>
+      <form onSubmit={submit} className="auth-form">
+        <div className="field">
+          <label htmlFor="admin-login-email">Email address</label>
+          <input id="admin-login-email" className="input" type="email" autoComplete="username" required
+                 value={email} onChange={(event) => setEmail(event.target.value)} placeholder="admin@tesseractuk.in" />
         </div>
-
-        {error && <div role="alert" className="login-error">{error}</div>}
-
-        <form onSubmit={submit} style={{ display: 'grid', gap: 14 }}>
-          <div className="field">
-            <label htmlFor="admin-login-email">Email address</label>
-            <input
-              id="admin-login-email"
-              className="input"
-              type="email"
-              autoComplete="username"
-              required
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              placeholder="admin@tesseractuk.in"
-            />
-          </div>
-          <div className="field">
-            <label htmlFor="admin-login-password">Password</label>
-            <input
-              id="admin-login-password"
-              className="input"
-              type="password"
-              autoComplete="current-password"
-              required
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              placeholder="Enter your password"
-            />
-          </div>
-          <button className="btn primary" type="submit" disabled={busy}>
-            {busy ? 'Signing in…' : 'Sign in as Admin'}
-          </button>
-        </form>
-
-        <p style={{ textAlign: 'center', marginTop: 20, fontSize: 14 }}>
-          Employee? <Link to="/login">Continue with Google</Link>
-        </p>
-      </div>
-    </div>
+        <div className="field">
+          <label htmlFor="admin-login-password">Password</label>
+          <PasswordInput id="admin-login-password" autoComplete="current-password" required
+                         value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Enter your password" />
+        </div>
+        <button className="btn auth-submit" type="submit" disabled={busy}>
+          {busy ? 'Signing in…' : 'Sign in as Admin'}
+        </button>
+      </form>
+    </AuthShell>
   )
 }
