@@ -78,3 +78,23 @@ def test_mailer_swallows_gmail_failures(service_account, monkeypatch):
     monkeypatch.setattr(config, "EMAIL_BACKEND", "gmail_api")
     _patch_transport(monkeypatch, lambda r: httpx.Response(500, text="boom"))
     mailer._deliver("a@tesseractuk.in", "Hi", "body")  # must not raise
+
+
+def test_refresh_token_mode_needs_no_service_account(monkeypatch):
+    monkeypatch.setattr(config, "GMAIL_REFRESH_TOKEN", "1//refresh")
+    monkeypatch.setattr(config, "GMAIL_SERVICE_ACCOUNT_JSON", "")
+    monkeypatch.setattr(config, "GOOGLE_CLIENT_ID", "cid")
+    monkeypatch.setattr(config, "GOOGLE_CLIENT_SECRET", "csecret")
+    monkeypatch.setitem(gmail_api._token, "value", None)
+    seen = {}
+
+    def handler(request):
+        if request.url.host == "oauth2.googleapis.com":
+            seen.update(dict(x.split("=", 1) for x in request.content.decode().split("&")))
+            return httpx.Response(200, json={"access_token": "tok2", "expires_in": 3600})
+        assert request.headers["authorization"] == "Bearer tok2"
+        return httpx.Response(200, json={"id": "1"})
+
+    _patch_transport(monkeypatch, handler)
+    gmail_api.send(_message())
+    assert seen["grant_type"] == "refresh_token" and seen["client_id"] == "cid"

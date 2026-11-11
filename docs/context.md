@@ -46,3 +46,6 @@ before any push). Browser automation unavailable, so UI was build-checked but no
 - Added `app/gmail_api.py` (service-account JWT → token, cached; Gmail `messages.send`, one retry on 401),
   `EMAIL_BACKEND=gmail_api` with `GMAIL_SERVICE_ACCOUNT_JSON` (raw or base64) + `GMAIL_SENDER`; config fails fast on a bad key.
 - Tests: `tests/test_gmail_api.py` against a mocked Google (token claims, caching, delegation error, mailer swallows failures). 28 pass.
+- Service-account key creation was blocked by org policy and the user lacks org IAM rights. Added
+  refresh-token mode to `gmail_api.py` + `backend/scripts/gmail_token.py` (local loopback on the
+  local GOOGLE_REDIRECT_URI, verifies signed-in email and granted scope). Service-account mode kept.

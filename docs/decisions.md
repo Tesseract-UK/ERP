@@ -77,3 +77,7 @@ Render's free tier blocks outbound SMTP ports, so Gmail SMTP + App Password cann
 Chose `EMAIL_BACKEND=gmail_api`: a Google Cloud service account with domain-wide
 delegation limited to `gmail.send`, impersonating `notifications@tesseractuk.in`, sending over
 HTTPS. No new dependencies (PyJWT + cryptography + httpx). SMTP remains supported for paid hosts.
+Update (same day): the org blocks service-account keys (`iam.disableServiceAccountKeyCreation`) and the
+user has no org-level rights, so the default is now `GMAIL_REFRESH_TOKEN`: the sending mailbox consents
+once to `gmail.send` via the existing OAuth client (`python -m scripts.gmail_token <mailbox>`). No admin,
+no key file. Requires the OAuth consent screen Audience = Internal (External/Testing tokens expire in 7 days).

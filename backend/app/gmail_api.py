@@ -1,11 +1,14 @@
-"""Send mail through the Gmail API with a Google Cloud service account.
+"""Send mail through the Gmail API over HTTPS (EMAIL_BACKEND=gmail_api).
 
-Used when EMAIL_BACKEND=gmail_api. Unlike SMTP this goes over HTTPS (443), so
-it works on hosts that block outbound SMTP ports (e.g. Render's free tier).
+Works on hosts that block outbound SMTP ports (e.g. Render's free tier).
+Two ways to authenticate, checked in this order:
 
-Needs a Google Workspace domain: the service account is granted domain-wide
-delegation for the single scope gmail.send, and impersonates GMAIL_SENDER
-(e.g. notifications@tesseractuk.in). Mail is sent from that real mailbox.
+1. GMAIL_REFRESH_TOKEN (recommended, no admin rights needed): the sending
+   mailbox signs in once with the app's existing Google OAuth client and grants
+   only the gmail.send scope; `python -m scripts.gmail_token` prints the token.
+2. GMAIL_SERVICE_ACCOUNT_JSON: a service account with Workspace domain-wide
+   delegation for gmail.send, impersonating GMAIL_SENDER. Needs a super admin
+   and an org that allows service-account keys.
 """
 import base64
 import json
@@ -38,23 +41,32 @@ def load_service_account(raw: str) -> dict:
     return info
 
 
+def _token_request() -> dict:
+    if config.GMAIL_REFRESH_TOKEN:
+        return {
+            "grant_type": "refresh_token",
+            "refresh_token": config.GMAIL_REFRESH_TOKEN,
+            "client_id": config.GOOGLE_CLIENT_ID,
+            "client_secret": config.GOOGLE_CLIENT_SECRET,
+        }
+    info = load_service_account(config.GMAIL_SERVICE_ACCOUNT_JSON)
+    now = int(time.time())
+    assertion = jwt.encode(
+        {"iss": info["client_email"], "sub": config.GMAIL_SENDER, "scope": SCOPE,
+         "aud": TOKEN_URL, "iat": now, "exp": now + 3600},
+        info["private_key"], algorithm="RS256",
+    )
+    return {"grant_type": "urn:ietf:params:oauth:grant-type:jwt-bearer", "assertion": assertion}
+
+
 def _access_token(client: httpx.Client) -> str:
     with _lock:
         if _token["value"] and time.time() < _token["expires"] - 60:
             return _token["value"]
-        info = load_service_account(config.GMAIL_SERVICE_ACCOUNT_JSON)
-        now = int(time.time())
-        assertion = jwt.encode(
-            {"iss": info["client_email"], "sub": config.GMAIL_SENDER, "scope": SCOPE,
-             "aud": TOKEN_URL, "iat": now, "exp": now + 3600},
-            info["private_key"], algorithm="RS256",
-        )
-        resp = client.post(TOKEN_URL, data={
-            "grant_type": "urn:ietf:params:oauth:grant-type:jwt-bearer",
-            "assertion": assertion,
-        })
+        resp = client.post(TOKEN_URL, data=_token_request())
         if resp.status_code != 200:
-            # e.g. unauthorized_client = domain-wide delegation not set up yet.
+            # invalid_grant = refresh token revoked/expired (re-run the script);
+            # unauthorized_client = domain-wide delegation not set up.
             raise RuntimeError(f"Gmail token request failed: {resp.status_code} {resp.text[:300]}")
         body = resp.json()
         _token["value"] = body["access_token"]
