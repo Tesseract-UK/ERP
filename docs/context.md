@@ -40,3 +40,9 @@ before any push). Browser automation unavailable, so UI was build-checked but no
 - Empty DB had no way to get an Admin (seed creates demo users with a known password; Render free has no shell). Added `app/bootstrap.py`: INITIAL_ADMIN_* env creates the first Admin once; also ensures the leave-policy template.
 - render.yaml no longer provisions a Render DB; DATABASE_URL is a dashboard secret (Supabase session pooler).
 - Tests: 25 pass on SQLite and Postgres. `TEST_DATABASE_URL` lets the suite run on a scratch Postgres.
+
+## 2026-11-11 — Gmail API mail backend
+- User asked for a GCP email option because SMTP is blocked on Render free tier.
+- Added `app/gmail_api.py` (service-account JWT → token, cached; Gmail `messages.send`, one retry on 401),
+  `EMAIL_BACKEND=gmail_api` with `GMAIL_SERVICE_ACCOUNT_JSON` (raw or base64) + `GMAIL_SENDER`; config fails fast on a bad key.
+- Tests: `tests/test_gmail_api.py` against a mocked Google (token claims, caching, delegation error, mailer swallows failures). 28 pass.

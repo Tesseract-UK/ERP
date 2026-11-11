@@ -47,6 +47,10 @@ def _deliver(to: str, subject: str, body: str) -> None:
     message["Subject"] = subject
     message.set_content(body)
     try:
+        if config.EMAIL_BACKEND == "gmail_api":
+            from .gmail_api import send
+            send(message)
+            return
         with smtplib.SMTP(config.SMTP_HOST, config.SMTP_PORT, timeout=20) as smtp:
             if config.SMTP_USE_TLS:
                 smtp.starttls()

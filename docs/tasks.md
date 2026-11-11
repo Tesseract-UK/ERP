@@ -1,9 +1,8 @@
 # Tasks — Tesseract HRMS
 
 ## Open
-- [ ] Choose email provider and set `EMAIL_BACKEND=smtp` + `SMTP_USERNAME`/`SMTP_PASSWORD`
-      on Render (Google Workspace App Password for notifications@tesseractuk.in, or a
-      transactional provider). Check Render plan allows outbound SMTP.
+- [ ] Email: create GCP service account + Workspace domain-wide delegation (gmail.send), then set
+      `EMAIL_BACKEND=gmail_api`, `GMAIL_SENDER`, `GMAIL_SERVICE_ACCOUNT_JSON` on Render (D-011).
 - [ ] Google Console: add `https://erp-gksp.onrender.com/auth/google/callback` as a redirect URI.
 - [ ] Render env: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`,
       `FRONTEND_URL`, `CORS_ORIGINS`; remove old Clerk vars.

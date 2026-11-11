@@ -142,10 +142,21 @@ SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
 SMTP_USERNAME = os.getenv("SMTP_USERNAME", "").strip()
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "").strip()
 SMTP_USE_TLS = os.getenv("SMTP_USE_TLS", "true").strip().lower() == "true"
-if EMAIL_BACKEND not in {"console", "smtp", "disabled"}:
-    raise RuntimeError("EMAIL_BACKEND must be console, smtp or disabled")
+# "gmail_api" sends over HTTPS with a Google Cloud service account that has
+# domain-wide delegation for gmail.send — use it where SMTP ports are blocked
+# (Render free tier). GMAIL_SERVICE_ACCOUNT_JSON is the key file's contents
+# (raw JSON or base64); GMAIL_SENDER is the Workspace mailbox to send as.
+GMAIL_SERVICE_ACCOUNT_JSON = os.getenv("GMAIL_SERVICE_ACCOUNT_JSON", "")
+GMAIL_SENDER = os.getenv("GMAIL_SENDER", "").strip().lower()
+if EMAIL_BACKEND not in {"console", "smtp", "gmail_api", "disabled"}:
+    raise RuntimeError("EMAIL_BACKEND must be console, smtp, gmail_api or disabled")
 if EMAIL_BACKEND == "smtp" and not (SMTP_HOST and SMTP_USERNAME and SMTP_PASSWORD):
     raise RuntimeError("EMAIL_BACKEND=smtp requires SMTP_HOST, SMTP_USERNAME and SMTP_PASSWORD")
+if EMAIL_BACKEND == "gmail_api":
+    if not (GMAIL_SERVICE_ACCOUNT_JSON.strip() and GMAIL_SENDER):
+        raise RuntimeError("EMAIL_BACKEND=gmail_api requires GMAIL_SERVICE_ACCOUNT_JSON and GMAIL_SENDER")
+    from .gmail_api import load_service_account as _check_sa  # fail fast on a bad key
+    _check_sa(GMAIL_SERVICE_ACCOUNT_JSON)
 
 # Working-day rules (can be moved to company settings later).
 STANDARD_WORK_HOURS = float(os.getenv("STANDARD_WORK_HOURS", "8"))

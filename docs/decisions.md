@@ -71,3 +71,9 @@ Tagged people can read the full thread (including the reason). Admins see all.
 **Date:** 2026-11-10
 **Decision:** Render connects to Supabase's Session pooler (IPv4) with sslmode=require. A fresh DB gets its first Admin from INITIAL_ADMIN_* at startup (only while no Admin exists). Demo seed is dev-only.
 **Status:** active
+
+## D-011 — Email via Gmail API (service account), not SMTP (2026-11-11)
+Render's free tier blocks outbound SMTP ports, so Gmail SMTP + App Password cannot send.
+Chose `EMAIL_BACKEND=gmail_api`: a Google Cloud service account with domain-wide
+delegation limited to `gmail.send`, impersonating `notifications@tesseractuk.in`, sending over
+HTTPS. No new dependencies (PyJWT + cryptography + httpx). SMTP remains supported for paid hosts.

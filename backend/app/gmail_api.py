@@ -1,0 +1,78 @@
+"""Send mail through the Gmail API with a Google Cloud service account.
+
+Used when EMAIL_BACKEND=gmail_api. Unlike SMTP this goes over HTTPS (443), so
+it works on hosts that block outbound SMTP ports (e.g. Render's free tier).
+
+Needs a Google Workspace domain: the service account is granted domain-wide
+delegation for the single scope gmail.send, and impersonates GMAIL_SENDER
+(e.g. notifications@tesseractuk.in). Mail is sent from that real mailbox.
+"""
+import base64
+import json
+import threading
+import time
+from email.message import EmailMessage
+
+import httpx
+import jwt
+
+from . import config
+
+TOKEN_URL = "https://oauth2.googleapis.com/token"
+SEND_URL = "https://gmail.googleapis.com/gmail/v1/users/me/messages/send"
+SCOPE = "https://www.googleapis.com/auth/gmail.send"
+
+_lock = threading.Lock()
+_token: dict = {"value": None, "expires": 0.0}
+
+
+def load_service_account(raw: str) -> dict:
+    """Accept the key file's JSON either as-is or base64-encoded."""
+    raw = raw.strip()
+    if not raw.startswith("{"):
+        raw = base64.b64decode(raw).decode("utf-8")
+    info = json.loads(raw)
+    for key in ("client_email", "private_key"):
+        if not info.get(key):
+            raise RuntimeError(f"GMAIL_SERVICE_ACCOUNT_JSON is missing '{key}'")
+    return info
+
+
+def _access_token(client: httpx.Client) -> str:
+    with _lock:
+        if _token["value"] and time.time() < _token["expires"] - 60:
+            return _token["value"]
+        info = load_service_account(config.GMAIL_SERVICE_ACCOUNT_JSON)
+        now = int(time.time())
+        assertion = jwt.encode(
+            {"iss": info["client_email"], "sub": config.GMAIL_SENDER, "scope": SCOPE,
+             "aud": TOKEN_URL, "iat": now, "exp": now + 3600},
+            info["private_key"], algorithm="RS256",
+        )
+        resp = client.post(TOKEN_URL, data={
+            "grant_type": "urn:ietf:params:oauth:grant-type:jwt-bearer",
+            "assertion": assertion,
+        })
+        if resp.status_code != 200:
+            # e.g. unauthorized_client = domain-wide delegation not set up yet.
+            raise RuntimeError(f"Gmail token request failed: {resp.status_code} {resp.text[:300]}")
+        body = resp.json()
+        _token["value"] = body["access_token"]
+        _token["expires"] = time.time() + int(body.get("expires_in", 3600))
+        return _token["value"]
+
+
+def send(message: EmailMessage) -> None:
+    raw = base64.urlsafe_b64encode(message.as_bytes()).decode("ascii")
+    with httpx.Client(timeout=20) as client:
+        token = _access_token(client)
+        resp = client.post(SEND_URL, json={"raw": raw},
+                           headers={"Authorization": f"Bearer {token}"})
+        if resp.status_code == 401:  # token revoked/rotated: retry once fresh
+            with _lock:
+                _token["value"] = None
+            token = _access_token(client)
+            resp = client.post(SEND_URL, json={"raw": raw},
+                               headers={"Authorization": f"Bearer {token}"})
+        if resp.status_code >= 300:
+            raise RuntimeError(f"Gmail send failed: {resp.status_code} {resp.text[:300]}")
