@@ -5,6 +5,7 @@ services:
   - type: web
     name: tesseract-hrms-api
     runtime: python
+    region: singapore  # same region as the Supabase database — keep them together
     rootDir: backend
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
