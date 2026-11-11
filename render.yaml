@@ -48,7 +48,7 @@ services:
       # Email: "console" only logs. Switch to "smtp" once the
       # notifications@tesseractuk.in App Password exists.
       - key: EMAIL_BACKEND
-        value: resend  # set to console until RESEND_API_KEY is added
+        value: console  # switch to resend once RESEND_API_KEY is set
       - key: EMAIL_FROM
         value: Tesseract HRMS <notifications@tesseractuk.in>
       - key: RESEND_API_KEY
