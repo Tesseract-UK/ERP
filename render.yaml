@@ -48,10 +48,8 @@ services:
       # Email: "console" only logs. Switch to "smtp" once the
       # notifications@tesseractuk.in App Password exists.
       - key: EMAIL_BACKEND
-        value: console
+        value: resend  # set to console until RESEND_API_KEY is added
       - key: EMAIL_FROM
         value: Tesseract HRMS <notifications@tesseractuk.in>
-      - key: SMTP_USERNAME
-        sync: false  # notifications@tesseractuk.in
-      - key: SMTP_PASSWORD
-        sync: false  # Google Workspace App Password — never commit
+      - key: RESEND_API_KEY
+        sync: false  # re_... from resend.com — never commit

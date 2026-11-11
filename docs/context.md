@@ -49,3 +49,5 @@ before any push). Browser automation unavailable, so UI was build-checked but no
 - Service-account key creation was blocked by org policy and the user lacks org IAM rights. Added
   refresh-token mode to `gmail_api.py` + `backend/scripts/gmail_token.py` (local loopback on the
   local GOOGLE_REDIRECT_URI, verifies signed-in email and granted scope). Service-account mode kept.
+- User wants sending only, no mailbox. Switched to Resend (`mailer._send_resend`), removed Gmail API code
+  and script, render.yaml now has RESEND_API_KEY instead of SMTP creds. 27 tests pass.

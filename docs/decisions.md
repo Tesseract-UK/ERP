@@ -81,3 +81,7 @@ Update (same day): the org blocks service-account keys (`iam.disableServiceAccou
 user has no org-level rights, so the default is now `GMAIL_REFRESH_TOKEN`: the sending mailbox consents
 once to `gmail.send` via the existing OAuth client (`python -m scripts.gmail_token <mailbox>`). No admin,
 no key file. Requires the OAuth consent screen Audience = Internal (External/Testing tokens expire in 7 days).
+Final (same day): user does not want a mailbox at all. Replaced the Gmail API backend with **Resend**
+(`EMAIL_BACKEND=resend`, `RESEND_API_KEY`): HTTPS API, sends from notifications@tesseractuk.in after
+DNS domain verification, no inbox, free 3,000/month (100/day). Gmail code removed (in git history,
+commits efde49b/b5b0695). Revisit the plan if daily volume passes 100.

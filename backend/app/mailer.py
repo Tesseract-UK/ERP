@@ -11,6 +11,7 @@ import smtplib
 from concurrent.futures import ThreadPoolExecutor
 from email.message import EmailMessage
 
+import httpx
 from sqlalchemy import event
 from sqlalchemy.orm import Session
 
@@ -18,6 +19,7 @@ from . import config
 
 log = logging.getLogger("hrms.mail")
 _OUTBOX_KEY = "hrms_email_outbox"
+RESEND_URL = "https://api.resend.com/emails"
 _executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="hrms-mail")
 
 
@@ -35,6 +37,18 @@ def app_link(path: str) -> str:
     return f"{config.FRONTEND_URL}{path}" if config.FRONTEND_URL else path
 
 
+def _send_resend(to: str, subject: str, body: str) -> None:
+    resp = httpx.post(
+        RESEND_URL,
+        headers={"Authorization": f"Bearer {config.RESEND_API_KEY}"},
+        json={"from": config.EMAIL_FROM, "to": [to], "subject": subject, "text": body},
+        timeout=20,
+    )
+    if resp.status_code >= 300:
+        # 403 "domain is not verified" = DNS records not added/propagated yet.
+        raise RuntimeError(f"Resend rejected the email: {resp.status_code} {resp.text[:300]}")
+
+
 def _deliver(to: str, subject: str, body: str) -> None:
     if config.EMAIL_BACKEND == "disabled":
         return
@@ -47,9 +61,8 @@ def _deliver(to: str, subject: str, body: str) -> None:
     message["Subject"] = subject
     message.set_content(body)
     try:
-        if config.EMAIL_BACKEND == "gmail_api":
-            from .gmail_api import send
-            send(message)
+        if config.EMAIL_BACKEND == "resend":
+            _send_resend(to, subject, body)
             return
         with smtplib.SMTP(config.SMTP_HOST, config.SMTP_PORT, timeout=20) as smtp:
             if config.SMTP_USE_TLS:
