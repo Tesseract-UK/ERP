@@ -56,3 +56,7 @@ before any push). Browser automation unavailable, so UI was build-checked but no
   Created gitignored root `.env.production` = every Render var + VITE_API_URL (generated SECRET_KEY and
   INITIAL_ADMIN_PASSWORD; DATABASE_URL and INITIAL_ADMIN_EMAIL left to fill). Hardened .gitignore (.env.*, keys,
   *.db); removed unused CLERK_* from local backend/.env; history scan found no committed secrets.
+- 2026-11-11: Supabase project recreated in Singapore (ap-southeast-1; first one landed in Sydney via "Auto"),
+  Data API disabled. Session-pooler URL (password percent-encoded) saved in `.env.production`. Initialised from
+  the Mac: 26 tables, 5 shifts, 8 policies, admin unnayan.m@ created; admin login 200, bad password 401.
+  INITIAL_ADMIN_* now commented out in `.env.production`. render.yaml region = singapore.
