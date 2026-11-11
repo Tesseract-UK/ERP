@@ -85,3 +85,6 @@ Final (same day): user does not want a mailbox at all. Replaced the Gmail API ba
 (`EMAIL_BACKEND=resend`, `RESEND_API_KEY`): HTTPS API, sends from notifications@tesseractuk.in after
 DNS domain verification, no inbox, free 3,000/month (100/day). Gmail code removed (in git history,
 commits efde49b/b5b0695). Revisit the plan if daily volume passes 100.
+Final-final: user rejected any third party and Resend's 100/day. Restored the Gmail API refresh-token
+backend (b5b0695) sending through an existing Workspace account (2,000/day, no new provider, HTTPS so
+Render free tier works). Resend removed. Path past 2,000/day: Workspace SMTP relay on a paid Render plan.

@@ -142,16 +142,30 @@ SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
 SMTP_USERNAME = os.getenv("SMTP_USERNAME", "").strip()
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "").strip()
 SMTP_USE_TLS = os.getenv("SMTP_USE_TLS", "true").strip().lower() == "true"
-# "resend" sends over HTTPS through resend.com (works where SMTP ports are
-# blocked, e.g. Render free tier). The EMAIL_FROM domain must be verified in
-# Resend; no real mailbox is needed for the From address.
-RESEND_API_KEY = os.getenv("RESEND_API_KEY", "").strip()
-if EMAIL_BACKEND not in {"console", "smtp", "resend", "disabled"}:
-    raise RuntimeError("EMAIL_BACKEND must be console, smtp, resend or disabled")
+# "gmail_api" sends over HTTPS via the Gmail API — use it where SMTP ports are
+# blocked (Render free tier). Authenticate with either GMAIL_REFRESH_TOKEN (the
+# sending mailbox's one-time consent through GOOGLE_CLIENT_ID; get it with
+# `python -m scripts.gmail_token`) or GMAIL_SERVICE_ACCOUNT_JSON (service
+# account + domain-wide delegation). GMAIL_SENDER is the mailbox sending mail.
+GMAIL_REFRESH_TOKEN = os.getenv("GMAIL_REFRESH_TOKEN", "").strip()
+GMAIL_SERVICE_ACCOUNT_JSON = os.getenv("GMAIL_SERVICE_ACCOUNT_JSON", "")
+GMAIL_SENDER = os.getenv("GMAIL_SENDER", "").strip().lower()
+if EMAIL_BACKEND not in {"console", "smtp", "gmail_api", "disabled"}:
+    raise RuntimeError("EMAIL_BACKEND must be console, smtp, gmail_api or disabled")
 if EMAIL_BACKEND == "smtp" and not (SMTP_HOST and SMTP_USERNAME and SMTP_PASSWORD):
     raise RuntimeError("EMAIL_BACKEND=smtp requires SMTP_HOST, SMTP_USERNAME and SMTP_PASSWORD")
-if EMAIL_BACKEND == "resend" and not RESEND_API_KEY.startswith("re_"):
-    raise RuntimeError("EMAIL_BACKEND=resend requires RESEND_API_KEY (starts with re_)")
+if EMAIL_BACKEND == "gmail_api":
+    if not GMAIL_SENDER:
+        raise RuntimeError("EMAIL_BACKEND=gmail_api requires GMAIL_SENDER")
+    if GMAIL_REFRESH_TOKEN:
+        if not (GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET):
+            raise RuntimeError("GMAIL_REFRESH_TOKEN requires GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET")
+    elif GMAIL_SERVICE_ACCOUNT_JSON.strip():
+        from .gmail_api import load_service_account as _check_sa  # fail fast on a bad key
+        _check_sa(GMAIL_SERVICE_ACCOUNT_JSON)
+    else:
+        raise RuntimeError(
+            "EMAIL_BACKEND=gmail_api requires GMAIL_REFRESH_TOKEN or GMAIL_SERVICE_ACCOUNT_JSON")
 
 # Working-day rules (can be moved to company settings later).
 STANDARD_WORK_HOURS = float(os.getenv("STANDARD_WORK_HOURS", "8"))

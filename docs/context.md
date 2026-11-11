@@ -51,3 +51,4 @@ before any push). Browser automation unavailable, so UI was build-checked but no
   local GOOGLE_REDIRECT_URI, verifies signed-in email and granted scope). Service-account mode kept.
 - User wants sending only, no mailbox. Switched to Resend (`mailer._send_resend`), removed Gmail API code
   and script, render.yaml now has RESEND_API_KEY instead of SMTP creds. 27 tests pass.
+- Restored Gmail API backend (user: no third party, needs >100/day); removed Resend.
