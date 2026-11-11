@@ -1,13 +1,32 @@
+# Dependencies and build output
 __pycache__/
 *.pyc
-.env
 .venv/
+venv/
 node_modules/
 dist/
-backend/hrms.db
-backend/*.db
+.vercel/
+
+# Secrets: every env file except the committed templates
+.env
+.env.*
+*.env
+!.env.example
+!**/.env.example
+client_secret_*.json
+*.pem
+*.key
+*.p12
+service-account*.json
+
+# Local data
+*.db
+*.db.bak-*
+*.sqlite
+*.sqlite3
 backend/uploads/
 
-# Google OAuth client secret downloads
-client_secret_*.json
-backend/hrms.db.bak-*
+# OS / editor
+.DS_Store
+.idea/
+.vscode/

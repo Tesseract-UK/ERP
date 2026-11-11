@@ -1,4 +1,6 @@
 # Render blueprint: FastAPI web service. The database is Supabase PostgreSQL.
+# All real values live in the gitignored root .env.production — paste them into
+# Render → Environment → "Add from .env".
 services:
   - type: web
     name: tesseract-hrms-api
@@ -45,8 +47,7 @@ services:
         value: none
       - key: PYTHON_VERSION
         value: 3.11.9
-      # Email: "console" only logs. Switch to "smtp" once the
-      # notifications@tesseractuk.in App Password exists.
+      # Email via Gmail API (Mitaly's Workspace account, sent as notifications@).
       - key: EMAIL_BACKEND
         value: console  # switch to gmail_api once GMAIL_REFRESH_TOKEN is set
       - key: EMAIL_FROM
