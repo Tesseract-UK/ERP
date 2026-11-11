@@ -1,8 +1,8 @@
 # Tasks — Tesseract HRMS
 
 ## Open
-- [ ] Email: run `python -m scripts.gmail_token <account>` as an existing Workspace account, then set
-      `EMAIL_BACKEND=gmail_api`, `GMAIL_SENDER`, `GMAIL_REFRESH_TOKEN` on Render (D-011).
+- [x] Email token for mitaly@ (sends as notifications@) — in `.env.production`.
+- [ ] Fill DATABASE_URL + INITIAL_ADMIN_EMAIL in `.env.production`, paste into Render; VITE_API_URL into Vercel.
 - [ ] Google Console: add `https://erp-gksp.onrender.com/auth/google/callback` as a redirect URI.
 - [ ] Render env: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`,
       `FRONTEND_URL`, `CORS_ORIGINS`; remove old Clerk vars.

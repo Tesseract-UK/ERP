@@ -52,3 +52,7 @@ before any push). Browser automation unavailable, so UI was build-checked but no
 - User wants sending only, no mailbox. Switched to Resend (`mailer._send_resend`), removed Gmail API code
   and script, render.yaml now has RESEND_API_KEY instead of SMTP creds. 27 tests pass.
 - Restored Gmail API backend (user: no third party, needs >100/day); removed Resend.
+- 2026-11-11: Gmail token obtained for mitaly@ (sends as notifications@ alias); verified with Google (200, gmail.send).
+  Created gitignored root `.env.production` = every Render var + VITE_API_URL (generated SECRET_KEY and
+  INITIAL_ADMIN_PASSWORD; DATABASE_URL and INITIAL_ADMIN_EMAIL left to fill). Hardened .gitignore (.env.*, keys,
+  *.db); removed unused CLERK_* from local backend/.env; history scan found no committed secrets.
